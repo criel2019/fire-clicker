@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2d1b4e"/>
+      <stop offset="100%" stop-color="#1a0e2e"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="70%" r="40%">
+      <stop offset="0%" stop-color="#ff6600" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#ff6600" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="flame-outer" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#cc2200"/>
+      <stop offset="40%" stop-color="#ff4400"/>
+      <stop offset="70%" stop-color="#ff6600"/>
+      <stop offset="100%" stop-color="#ff8800"/>
+    </linearGradient>
+    <linearGradient id="flame-mid" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ff6600"/>
+      <stop offset="50%" stop-color="#ff8800"/>
+      <stop offset="100%" stop-color="#ffaa00"/>
+    </linearGradient>
+    <linearGradient id="flame-inner" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ffaa00"/>
+      <stop offset="50%" stop-color="#ffcc00"/>
+      <stop offset="100%" stop-color="#ffee44"/>
+    </linearGradient>
+    <linearGradient id="flame-core" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#ffdd44"/>
+      <stop offset="100%" stop-color="#ffffcc"/>
+    </linearGradient>
+  </defs>
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="250" fill="url(#bg)" stroke="#3d2b5e" stroke-width="6"/>
+  <!-- Ambient glow -->
+  <circle cx="256" cy="300" r="200" fill="url(#glow)"/>
+  <!-- Wood logs -->
+  <ellipse cx="256" cy="390" rx="90" ry="12" fill="#5a3a1a" opacity="0.6"/>
+  <rect x="175" y="365" width="160" height="22" rx="11" fill="#6b4226" transform="rotate(-8 255 376)"/>
+  <rect x="185" y="370" width="150" height="20" rx="10" fill="#7a4f2e" transform="rotate(10 260 380)"/>
+  <!-- Outer flame (red-orange) -->
+  <path d="M256 110
+    C 256 110, 310 180, 330 220
+    C 350 260, 360 290, 355 320
+    C 365 280, 375 310, 370 340
+    C 365 365, 350 385, 330 390
+    C 360 370, 345 360, 340 380
+    L 340 385
+    C 310 400, 200 400, 172 385
+    L 172 380
+    C 167 360, 152 370, 182 390
+    C 162 385, 147 365, 142 340
+    C 137 310, 147 280, 157 320
+    C 152 290, 152 260, 182 220
+    C 202 180, 256 110, 256 110Z"
+    fill="url(#flame-outer)" opacity="0.95"/>
+  <!-- Left small flame -->
+  <path d="M190 250
+    C 190 250, 170 210, 185 190
+    C 195 220, 210 230, 205 250Z"
+    fill="#ff5500" opacity="0.7"/>
+  <!-- Right small flame -->
+  <path d="M322 250
+    C 322 250, 342 210, 327 185
+    C 317 215, 302 230, 307 250Z"
+    fill="#ff5500" opacity="0.7"/>
+  <!-- Middle flame (orange) -->
+  <path d="M256 145
+    C 256 145, 300 210, 315 250
+    C 330 285, 335 310, 325 345
+    C 330 325, 332 340, 325 360
+    C 310 385, 202 385, 187 360
+    C 180 340, 182 325, 187 345
+    C 177 310, 182 285, 197 250
+    C 212 210, 256 145, 256 145Z"
+    fill="url(#flame-mid)" opacity="0.9"/>
+  <!-- Inner flame (yellow-orange) -->
+  <path d="M256 185
+    C 256 185, 290 235, 300 270
+    C 310 300, 310 330, 300 355
+    C 305 340, 305 350, 298 365
+    C 285 380, 227 380, 214 365
+    C 207 350, 207 340, 212 355
+    C 202 330, 202 300, 212 270
+    C 222 235, 256 185, 256 185Z"
+    fill="url(#flame-inner)" opacity="0.9"/>
+  <!-- Core flame (bright yellow-white) -->
+  <path d="M256 240
+    C 256 240, 278 275, 282 300
+    C 286 320, 282 345, 274 360
+    C 265 370, 247 370, 238 360
+    C 230 345, 226 320, 230 300
+    C 234 275, 256 240, 256 240Z"
+    fill="url(#flame-core)" opacity="0.85"/>
+  <!-- Sparks -->
+  <circle cx="220" cy="165" r="3" fill="#ffcc00" opacity="0.8"/>
+  <circle cx="295" cy="150" r="2.5" fill="#ffaa00" opacity="0.7"/>
+  <circle cx="240" cy="135" r="2" fill="#ffdd44" opacity="0.6"/>
+  <circle cx="275" cy="125" r="2.5" fill="#ffcc00" opacity="0.7"/>
+  <circle cx="310" cy="175" r="2" fill="#ff8800" opacity="0.5"/>
+  <circle cx="200" cy="180" r="2" fill="#ff8800" opacity="0.5"/>
+</svg>

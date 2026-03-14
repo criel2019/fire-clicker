@@ -1,0 +1,15 @@
+{
+  "appId": "com.fireclicker.app",
+  "appName": "불키우기",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "StatusBar": {
+      "style": "Dark",
+      "backgroundColor": "#000000"
+    },
+    "Haptics": {}
+  }
+}
