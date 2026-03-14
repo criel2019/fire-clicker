@@ -171,7 +171,13 @@ export class Background {
     const tiers = 4;
     ctx.save();
     ctx.globalAlpha = opacity;
-    ctx.fillStyle = 'rgba(4, 6, 10, 0.97)';
+
+    // Tree fill: pure silhouette black with faint amber warmth at base from campfire
+    const treeGrad = ctx.createLinearGradient(x, groundY - height, x, groundY);
+    treeGrad.addColorStop(0,    '#000000');
+    treeGrad.addColorStop(0.55, '#020202');
+    treeGrad.addColorStop(1,    '#0e0602');   // barely-warm tint at ground level
+    ctx.fillStyle = treeGrad;
 
     // Trunk
     const trunkW = width * 0.07;

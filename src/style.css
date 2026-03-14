@@ -64,6 +64,8 @@ canvas {
 
 #fireCanvas {
   z-index: 2;
+  mix-blend-mode: screen;
+  filter: blur(2.5px) saturate(1.2) brightness(1.05);
 }
 #groundCanvas {
   z-index: 1;
@@ -296,7 +298,7 @@ canvas {
 #throwLayer {
   position: absolute;
   inset: 0;
-  z-index: 12;
+  z-index: 28;
   pointer-events: none;
   overflow: hidden;
 }

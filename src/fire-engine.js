@@ -1,379 +1,234 @@
 /**
  * fire-engine.js
- * WebGL-based realistic fire shader with FBM noise
- * The crown jewel - beautiful campfire for 불멍
+ * Doom-fire pixel simulation — reliable on all devices, beautiful campfire
+ * Heat diffusion algorithm: elliptical bottom heat source → spreads upward
  */
 
-const VERT_SHADER = `
-attribute vec2 a_position;
-varying vec2 v_uv;
-void main() {
-  v_uv = a_position * 0.5 + 0.5;
-  gl_Position = vec4(a_position, 0.0, 1.0);
-}`;
+// ── 37-step fire palette: invisible → dark ember → red → orange → yellow → white ──
+const PALETTE = [
+  [ 7,   7,   7,   0],  //  0 — fully transparent (no fire)
+  [31,   7,   7,   0],  //  1 — transparent
+  [47,  15,   7,  70],  //  2 — barely-visible dark ember
+  [71,  15,   7, 110],  //  3
+  [87,  23,   7, 145],  //  4
+  [103, 31,   7, 175],  //  5
+  [119, 31,   7, 200],  //  6
+  [143, 39,   7, 220],  //  7
+  [159, 47,   7, 235],  //  8
+  [175, 63,   7, 248],  //  9
+  [191, 71,   7, 255],  // 10
+  [199, 71,   7, 255],  // 11
+  [223, 79,   7, 255],  // 12
+  [223, 87,   7, 255],  // 13
+  [223, 87,   7, 255],  // 14
+  [215, 95,   7, 255],  // 15
+  [215, 95,   7, 255],  // 16
+  [215, 103, 15, 255],  // 17
+  [207, 111, 15, 255],  // 18
+  [207, 119, 15, 255],  // 19
+  [207, 127, 15, 255],  // 20
+  [207, 135, 23, 255],  // 21
+  [199, 135, 23, 255],  // 22
+  [199, 143, 23, 255],  // 23
+  [199, 151, 31, 255],  // 24
+  [191, 159, 31, 255],  // 25
+  [191, 159, 31, 255],  // 26
+  [191, 167, 39, 255],  // 27
+  [191, 167, 39, 255],  // 28
+  [191, 175, 47, 255],  // 29
+  [183, 175, 47, 255],  // 30
+  [183, 183, 47, 255],  // 31
+  [183, 183, 55, 255],  // 32
+  [207, 207, 111, 255], // 33
+  [223, 223, 159, 255], // 34
+  [239, 239, 199, 255], // 35
+  [255, 255, 255, 255], // 36 — white-hot core
+];
 
-const FRAG_SHADER = `
-precision highp float;
+// Simulation grid dimensions (small → scale up for smooth look)
+const SIM_W = 90;
+const SIM_H = 140;
 
-varying vec2 v_uv;
-uniform float u_time;
-uniform float u_intensity;    // 0.3 ~ 2.0+
-uniform float u_wind;         // -1.0 ~ 1.0
-uniform vec3 u_tint;          // color tint (1,1,1 = normal)
-uniform vec2 u_resolution;
-uniform float u_baseY;        // fire base Y position (0~1)
-uniform float u_flicker;      // random flicker seed
-
-// === Simplex Noise ===
-vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
-vec2 mod289v2(vec2 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
-vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
-
-float snoise(vec2 v) {
-  const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                     -0.577350269189626, 0.024390243902439);
-  vec2 i = floor(v + dot(v, C.yy));
-  vec2 x0 = v - i + dot(i, C.xx);
-  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  vec4 x12 = x0.xyxy + C.xxzz;
-  x12.xy -= i1;
-  i = mod289v2(i);
-  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
-  m = m*m; m = m*m;
-  vec3 x = 2.0 * fract(p * C.www) - 1.0;
-  vec3 h = abs(x) - 0.5;
-  vec3 ox = floor(x + 0.5);
-  vec3 a0 = x - ox;
-  m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
-  vec3 g;
-  g.x = a0.x * x0.x + h.x * x0.y;
-  g.yz = a0.yz * x12.xz + h.yz * x12.yw;
-  return 130.0 * dot(m, g);
-}
-
-// === Fractal Brownian Motion ===
-float fbm(vec2 p, int octaves) {
-  float f = 0.0, w = 0.5;
-  for(int i = 0; i < 6; i++) {
-    if(i >= octaves) break;
-    f += w * snoise(p);
-    p *= 2.03;
-    w *= 0.48;
-  }
-  return f;
-}
-
-// === Fire Color Palette ===
-vec3 fireColor(float t) {
-  // t: 0 = cold/transparent, 1 = hottest
-  // Multi-stop gradient: black -> dark red -> red -> orange -> yellow -> white
-  vec3 c;
-  if(t < 0.15) {
-    c = mix(vec3(0.05, 0.0, 0.0), vec3(0.4, 0.05, 0.0), t / 0.15);
-  } else if(t < 0.3) {
-    c = mix(vec3(0.4, 0.05, 0.0), vec3(0.85, 0.15, 0.02), (t - 0.15) / 0.15);
-  } else if(t < 0.5) {
-    c = mix(vec3(0.85, 0.15, 0.02), vec3(1.0, 0.45, 0.05), (t - 0.3) / 0.2);
-  } else if(t < 0.7) {
-    c = mix(vec3(1.0, 0.45, 0.05), vec3(1.0, 0.75, 0.15), (t - 0.5) / 0.2);
-  } else if(t < 0.85) {
-    c = mix(vec3(1.0, 0.75, 0.15), vec3(1.0, 0.95, 0.6), (t - 0.7) / 0.15);
-  } else {
-    c = mix(vec3(1.0, 0.95, 0.6), vec3(1.0, 1.0, 0.9), (t - 0.85) / 0.15);
-  }
-  return c;
-}
-
-void main() {
-  vec2 uv = v_uv;
-  float aspect = u_resolution.x / u_resolution.y;
-
-  // Coordinate system: center bottom of fire area
-  float fireBaseY = u_baseY; // typically 0.3 (30% from bottom)
-  vec2 fireUV;
-  fireUV.x = (uv.x - 0.5) * aspect * 2.0; // centered, aspect-corrected
-  fireUV.y = (uv.y - fireBaseY) / (1.0 - fireBaseY); // 0 at base, 1 at top
-  fireUV.y = 1.0 - fireUV.y; // flip: 0 at top, 1 at base
-
-  // Skip pixels far from fire
-  if(fireUV.y < -0.3 || fireUV.y > 1.3 || abs(fireUV.x) > 2.0) {
-    gl_FragColor = vec4(0.0);
-    return;
-  }
-
-  float time = u_time;
-  float intensity = u_intensity;
-
-  // === Fire shape ===
-  // Wider at base, narrow at tip
-  float heightPct = 1.0 - fireUV.y; // 0 at base, 1 at top
-  float fireWidth = mix(0.15, 0.55 * intensity, fireUV.y);
-  fireWidth += 0.05 * sin(time * 2.3) * intensity; // breathing
-
-  // === Noise distortion ===
-  float windOffset = u_wind * heightPct * 0.3;
-  vec2 noiseUV = vec2(
-    fireUV.x * 1.8 + windOffset,
-    heightPct * 2.5 - time * 1.8
-  );
-
-  // Multiple noise layers for organic movement
-  float n1 = fbm(noiseUV * 3.0, 5);
-  float n2 = fbm(noiseUV * 6.0 + vec2(100.0, 0.0), 4);
-  float n3 = fbm(noiseUV * 1.5 + vec2(0.0, 50.0) + time * 0.3, 3);
-
-  // Distort horizontal position
-  float distortedX = fireUV.x + n1 * 0.25 * heightPct + windOffset;
-  distortedX += n3 * 0.1;
-
-  // === Core flame shape ===
-  float dist = abs(distortedX) / fireWidth;
-
-  // Flame falloff
-  float flame = 1.0 - smoothstep(0.0, 1.0, dist);
-
-  // Vertical fade: strong at base, thin at top
-  float vertFade = smoothstep(0.0, 0.15, fireUV.y); // fade at very top
-  vertFade *= 1.0 - smoothstep(0.3, 1.0, heightPct / intensity);
-  flame *= vertFade;
-
-  // Add detail noise
-  flame += n2 * 0.15 * flame;
-  flame *= 1.0 + n1 * 0.2;
-
-  // Small flicker
-  flame *= 0.9 + 0.1 * sin(time * 8.0 + fireUV.x * 5.0 + u_flicker);
-
-  flame = clamp(flame, 0.0, 1.0);
-
-  // === Inner core (hottest part) ===
-  float coreWidth = fireWidth * 0.35;
-  float coreDist = abs(distortedX) / coreWidth;
-  float core = 1.0 - smoothstep(0.0, 1.0, coreDist);
-  core *= smoothstep(0.0, 0.2, fireUV.y);
-  core *= 1.0 - smoothstep(0.0, 0.5, heightPct / intensity);
-  core = clamp(core, 0.0, 1.0);
-
-  // === Temperature (for color mapping) ===
-  float temp = flame * 0.6 + core * 0.4;
-  temp *= intensity * 0.8;
-  temp = clamp(temp, 0.0, 1.0);
-
-  // === Color ===
-  vec3 col = fireColor(temp);
-  col *= u_tint;
-
-  // Add subtle blue at base (very hot = blue-white)
-  if(temp > 0.9) {
-    col = mix(col, vec3(0.8, 0.85, 1.0), (temp - 0.9) * 2.0);
-  }
-
-  // === Glow ===
-  float glowRadius = fireWidth * 3.0 * intensity;
-  float glowDist = length(vec2(fireUV.x, heightPct * 0.5));
-  float glow = exp(-glowDist * glowDist / (glowRadius * glowRadius * 0.3));
-  glow *= 0.15 * intensity;
-
-  vec3 glowCol = vec3(1.0, 0.3, 0.05) * glow;
-
-  // === Alpha ===
-  float alpha = smoothstep(0.01, 0.08, flame);
-  alpha = max(alpha, glow * 0.5);
-  alpha = clamp(alpha, 0.0, 1.0);
-
-  // === Final composite ===
-  vec3 finalCol = col + glowCol;
-
-  gl_FragColor = vec4(finalCol, alpha);
-}
-`;
+// Campfire heat-source radius (fraction of SIM_W from center)
+const CAMPFIRE_R = SIM_W * 0.23;
 
 export class FireEngine {
   constructor(canvas) {
     this.canvas = canvas;
-    this.gl = null;
-    this.program = null;
-    this.startTime = performance.now() / 1000;
-    this.intensity = 0.80;
+    this.ctx    = canvas.getContext('2d');
+
+    // Intensity / wind / tint state
+    this.intensity       = 0.80;
     this.targetIntensity = 0.80;
-    this.wind = 0;
-    this.targetWind = 0;
-    this.tint = [1, 1, 1];
-    this.targetTint = [1, 1, 1];
-    this.baseY = 0.30;   // fire base slightly lower → sits on the logs
-    this.flickerSeed = 0;
-    this.boostTimer = 0;
-    this.boostIntensity = 0;
+    this.wind            = 0;
+    this.targetWind      = 0;
+    this.tint            = [1, 1, 1];
+    this.targetTint      = [1, 1, 1];
+    this.boostTimer      = 0;
+    this.boostIntensity  = 0;
 
-    this._init();
+    // Heat pixel buffer (Uint8Array of heat indices 0–36)
+    this.pixels = new Uint8Array(SIM_W * SIM_H);
+
+    // Offscreen canvas used to convert heat → RGBA → drawImage
+    this._off    = document.createElement('canvas');
+    this._off.width  = SIM_W;
+    this._off.height = SIM_H;
+    this._offCtx = this._off.getContext('2d');
+    this._img    = this._offCtx.createImageData(SIM_W, SIM_H);
+
+    // Warm up simulation a bit so fire is visible immediately
+    this._seedHeat(0.80);
+    for (let i = 0; i < 60; i++) this._simStep();
   }
 
-  _init() {
-    const gl = this.canvas.getContext('webgl', {
-      alpha: true,
-      premultipliedAlpha: false,
-      antialias: false,
-      preserveDrawingBuffer: false,
-    });
-    if (!gl) {
-      console.error('WebGL not supported');
-      return;
+  // ── Seed the campfire heat source at the bottom rows ──
+  _seedHeat(intensity) {
+    const maxHeat = Math.round(36 * Math.min(1.0, intensity * 0.98));
+    const cx = SIM_W * 0.5;
+
+    for (let x = 0; x < SIM_W; x++) {
+      const dist = Math.abs(x - cx) / CAMPFIRE_R;
+      const heat = dist >= 1 ? 0 : Math.round(maxHeat * (1 - dist * dist));
+      this.pixels[(SIM_H - 1) * SIM_W + x] = heat;
+      this.pixels[(SIM_H - 2) * SIM_W + x] = Math.round(heat * 0.88);
+      this.pixels[(SIM_H - 3) * SIM_W + x] = Math.round(heat * 0.72);
     }
-    this.gl = gl;
-
-    // Compile shaders
-    const vs = this._compile(gl.VERTEX_SHADER, VERT_SHADER);
-    const fs = this._compile(gl.FRAGMENT_SHADER, FRAG_SHADER);
-    if (!vs || !fs) return;
-
-    // Link program
-    const prog = gl.createProgram();
-    gl.attachShader(prog, vs);
-    gl.attachShader(prog, fs);
-    gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-      console.error('Program link failed:', gl.getProgramInfoLog(prog));
-      return;
-    }
-    this.program = prog;
-
-    // Full-screen quad
-    const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
-    const buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
-
-    // Attribute
-    this.aPos = gl.getAttribLocation(prog, 'a_position');
-
-    // Uniforms
-    this.uTime = gl.getUniformLocation(prog, 'u_time');
-    this.uIntensity = gl.getUniformLocation(prog, 'u_intensity');
-    this.uWind = gl.getUniformLocation(prog, 'u_wind');
-    this.uTint = gl.getUniformLocation(prog, 'u_tint');
-    this.uResolution = gl.getUniformLocation(prog, 'u_resolution');
-    this.uBaseY = gl.getUniformLocation(prog, 'u_baseY');
-    this.uFlicker = gl.getUniformLocation(prog, 'u_flicker');
-
-    // Enable blending
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   }
 
-  _compile(type, src) {
-    const gl = this.gl;
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, src);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-      console.error('Shader compile error:', gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader);
-      return null;
+  // ── One step of the Doom-fire diffusion algorithm ──
+  _simStep() {
+    const px      = this.pixels;
+    const windInt = Math.round(this.wind * 1.8);
+
+    // Iterate top→bottom; for each pixel, pull heat from the row below
+    for (let y = 0; y < SIM_H - 1; y++) {
+      for (let x = 0; x < SIM_W; x++) {
+        const heat = px[(y + 1) * SIM_W + x];
+        if (heat === 0) {
+          px[y * SIM_W + x] = 0;
+        } else {
+          const rnd  = (Math.random() * 4) | 0;          // 0–3
+          const dstX = Math.max(0, Math.min(SIM_W - 1, x - rnd + 1 + windInt));
+          px[y * SIM_W + dstX] = Math.max(0, heat - (rnd & 1));
+        }
+      }
     }
-    return shader;
   }
 
+  // ── Convert heat buffer → RGBA image data ──
+  _blit() {
+    const d    = this._img.data;
+    const px   = this.pixels;
+    const tint = this.tint;
+
+    for (let i = 0; i < SIM_W * SIM_H; i++) {
+      const p   = PALETTE[px[i]];
+      const idx = i * 4;
+      d[idx]   = Math.min(255, (p[0] * tint[0]) | 0);
+      d[idx+1] = Math.min(255, (p[1] * tint[1]) | 0);
+      d[idx+2] = Math.min(255, (p[2] * tint[2]) | 0);
+      d[idx+3] = p[3];
+    }
+    this._offCtx.putImageData(this._img, 0, 0);
+  }
+
+  // ── Canvas resize handling ──
   resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const w = this.canvas.clientWidth * dpr;
-    const h = this.canvas.clientHeight * dpr;
+    const w   = this.canvas.clientWidth  * dpr;
+    const h   = this.canvas.clientHeight * dpr;
     if (this.canvas.width !== w || this.canvas.height !== h) {
-      this.canvas.width = w;
+      this.canvas.width  = w;
       this.canvas.height = h;
     }
   }
 
-  /**
-   * Boost fire intensity temporarily
-   * @param {number} amount - boost amount (0.05 ~ 0.5 for toothpick)
-   * @param {number} duration - duration in seconds
-   */
+  // ── Public API (same interface as before) ──
+
   boost(amount, duration = 1.5) {
-    this.boostIntensity = Math.min(this.boostIntensity + amount, 0.6); // cap toothpick boost
-    this.boostTimer = Math.max(this.boostTimer, duration);
+    this.boostIntensity = Math.min(this.boostIntensity + amount, 0.55);
+    this.boostTimer     = Math.max(this.boostTimer, duration);
   }
 
-  /**
-   * Set permanent base intensity
-   * @param {number} val - base intensity (0.8 ~ 1.5)
-   */
   setBaseIntensity(val) {
     this.targetIntensity = Math.max(0.80, Math.min(val, 1.5));
   }
 
-  /**
-   * Set wind direction
-   * @param {number} val - wind (-1 left, 0 none, 1 right)
-   */
   setWind(val) {
     this.targetWind = Math.max(-1, Math.min(val, 1));
   }
 
-  /**
-   * Set color tint (for special items)
-   * @param {number[]} rgb - [r, g, b] normalized
-   * @param {number} duration - duration in seconds
-   */
   setTint(rgb, duration = 3) {
     this.targetTint = [...rgb];
     if (duration > 0) {
-      setTimeout(() => {
-        this.targetTint = [1, 1, 1];
-      }, duration * 1000);
+      setTimeout(() => { this.targetTint = [1, 1, 1]; }, duration * 1000);
     }
   }
 
   render(dt) {
-    const gl = this.gl;
-    if (!gl || !this.program) return;
-
     this.resize();
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
-    gl.clearColor(0, 0, 0, 0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // Update boost — toothpick flare decays quickly
+    // ── Update boost ──
     if (this.boostTimer > 0) {
       this.boostTimer -= dt;
-      if (this.boostTimer <= 0) {
-        this.boostTimer = 0;
-      }
     } else {
-      // Fast decay back to base after boost expires
-      this.boostIntensity *= Math.pow(0.15, dt);
+      this.boostIntensity *= Math.pow(0.12, dt);
     }
 
-    // Smooth interpolation — slightly slower for organic feel
-    const lerpSpeed = 2.2 * dt;
-    const target = this.targetIntensity + this.boostIntensity;
-    this.intensity += (target - this.intensity) * Math.min(lerpSpeed, 1);
-    this.wind += (this.targetWind - this.wind) * Math.min(lerpSpeed * 0.5, 1);
+    // ── Smooth lerp toward targets ──
+    const ls  = Math.min(2.5 * dt, 1);
+    const tgt = this.targetIntensity + this.boostIntensity;
+    this.intensity += (tgt - this.intensity) * ls;
+    this.wind      += (this.targetWind - this.wind) * (ls * 0.4);
     for (let i = 0; i < 3; i++) {
-      this.tint[i] += (this.targetTint[i] - this.tint[i]) * Math.min(lerpSpeed, 1);
+      this.tint[i] += (this.targetTint[i] - this.tint[i]) * ls;
     }
 
-    // Flicker
-    this.flickerSeed += dt * 12;
+    // Natural gentle wind sway
+    const natWind = Math.sin(performance.now() / 1400) * 0.10;
+    this.wind += (natWind - this.wind) * 0.025;
 
-    // Natural wind variation
-    const naturalWind = Math.sin(performance.now() / 1000 * 0.7) * 0.05;
+    // ── Simulate ──
+    this._seedHeat(this.intensity);
+    this._simStep();
+    this._simStep();
+    this._blit();
 
-    gl.useProgram(this.program);
+    // ── Draw to screen ──
+    const ctx = this.ctx;
+    const cw  = this.canvas.width;
+    const ch  = this.canvas.height;
 
-    // Set uniforms
-    const t = performance.now() / 1000 - this.startTime;
-    gl.uniform1f(this.uTime, t);
-    gl.uniform1f(this.uIntensity, this.intensity);
-    gl.uniform1f(this.uWind, this.wind + naturalWind);
-    gl.uniform3f(this.uTint, this.tint[0], this.tint[1], this.tint[2]);
-    gl.uniform2f(this.uResolution, this.canvas.width, this.canvas.height);
-    gl.uniform1f(this.uBaseY, this.baseY);
-    gl.uniform1f(this.uFlicker, this.flickerSeed);
+    ctx.clearRect(0, 0, cw, ch);
 
-    // Draw quad
-    gl.enableVertexAttribArray(this.aPos);
-    gl.vertexAttribPointer(this.aPos, 2, gl.FLOAT, false, 0, 0);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    // Fire position: centered, base at 72% screen height (where the logs are)
+    const fireW = cw * 0.38;
+    const fireH = ch * 0.36;
+    const fireX = (cw - fireW) * 0.5;
+    const fireY = ch * 0.72 - fireH;
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Draw glow layers for volumetric depth
+    // Outer soft halo
+    ctx.globalAlpha = 0.18;
+    ctx.drawImage(this._off,
+      fireX - fireW * 0.25, fireY - fireH * 0.18,
+      fireW * 1.5,          fireH * 1.36);
+
+    // Mid glow
+    ctx.globalAlpha = 0.42;
+    ctx.drawImage(this._off,
+      fireX - fireW * 0.10, fireY - fireH * 0.06,
+      fireW * 1.2,          fireH * 1.12);
+
+    // Core fire — full opacity
+    ctx.globalAlpha = 1.0;
+    ctx.drawImage(this._off, fireX, fireY, fireW, fireH);
+
+    ctx.restore();
   }
 }

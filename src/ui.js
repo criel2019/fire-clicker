@@ -39,16 +39,17 @@ export class UI {
     const toothpick = woodItems.find(it => it.name === '이쑤시개');
 
     btn.addEventListener('click', () => {
-      if (toothpick) {
-        this.onBurnItem('wood', toothpick.index);
-      } else {
-        // fallback: burn any wood rarity-1 item
-        const fallback = woodItems.find(it => it.rarity === 1);
-        if (fallback) this.onBurnItem('wood', fallback.index);
-      }
       btn.classList.remove('throw-flash');
       void btn.offsetWidth;
       btn.classList.add('throw-flash');
+
+      // Close drawer first so the throw arc is fully visible
+      this.closeDrawer();
+
+      const targetItem = toothpick || woodItems.find(it => it.rarity === 1);
+      if (targetItem) {
+        setTimeout(() => this.onBurnItem('wood', targetItem.index), 320);
+      }
     });
   }
 
