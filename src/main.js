@@ -16,9 +16,15 @@ import {
   floatingNumber, showCombo, showAchievement, throwItem,
   tapRipple, updateFireGlow,
 } from './effects.js';
+import { Intro } from './intro.js';
+import { NPCSystem } from './npc.js';
+import { ToothpickLayer } from './toothpick-layer.js';
+import { ITEMS } from './items-data.js';
 
 // ============ GLOBALS ============
 let fireEngine, particles, background, gameState, soundManager, ui;
+let npcSystem;
+let toothpickLayer;
 let lastTime = 0;
 let isRunning = false;
 
@@ -45,6 +51,12 @@ async function init() {
   // Initialize effects
   initFireworks(fwContainer);
 
+  // Initialize NPC silhouette system
+  npcSystem = new NPCSystem(document.getElementById('npcCanvas'), gameState);
+
+  // Initialize toothpick layer
+  toothpickLayer = new ToothpickLayer(document.getElementById('toothpickCanvas'));
+
   // Initialize UI
   ui = new UI(gameState, handleBurnItem);
 
@@ -65,7 +77,7 @@ async function init() {
   fireEngine.setBaseIntensity(initIntensity);
   particles.setIntensity(initIntensity);
 
-  // Start sound on first interaction
+  // Start sound on first interaction (intro taps bubble up and trigger this)
   const startSound = () => {
     soundManager.init();
     document.removeEventListener('pointerdown', startSound);
@@ -74,10 +86,14 @@ async function init() {
   document.addEventListener('pointerdown', startSound, { once: true });
   document.addEventListener('touchstart', startSound, { once: true });
 
-  // Start game loop
-  isRunning = true;
-  lastTime = performance.now();
-  requestAnimationFrame(gameLoop);
+  // Run intro sequence, then start game loop on completion
+  const intro = new Intro(soundManager);
+  intro.start(() => {
+    // Intro complete — begin game
+    isRunning = true;
+    lastTime = performance.now();
+    requestAnimationFrame(gameLoop);
+  });
 }
 
 // ============ GAME LOOP ============
@@ -104,8 +120,11 @@ function gameLoop(timestamp) {
   background.renderBackground(timestamp);
   background.renderGround(intensity);
   fireEngine.render(dt);
+  toothpickLayer.render(dt);
   particles.update(dt);
   particles.render();
+  npcSystem.update(dt, timestamp);
+  npcSystem.render();
   updateFireGlow(intensity);
 
   // Update HUD (throttled)
@@ -124,8 +143,8 @@ function setupInteractions(fireCanvas, particleCanvas) {
   let lastTapTime = 0;
 
   app.addEventListener('pointerdown', (e) => {
-    // Don't interact when drawer is open or clicking UI
-    if (ui.isDrawerOpen || ui.isAmbientMode) {
+    // Don't interact when drawer/burn log is open or clicking UI
+    if (ui.isDrawerOpen || ui.isAmbientMode || ui.burnLogOpen) {
       // In ambient mode, tap to exit
       if (ui.isAmbientMode) {
         ui.toggleAmbientMode();
@@ -137,13 +156,30 @@ function setupInteractions(fireCanvas, particleCanvas) {
     if (target.closest('#inventoryDrawer') ||
         target.closest('#hud') ||
         target.closest('#itemModal') ||
-        target.closest('#ambientToggle')) {
+        target.closest('#ambientToggle') ||
+        target.closest('#burnLogPanel')) {
       return;
     }
 
     const now = performance.now();
     if (now - lastTapTime < 50) return; // debounce
     lastTapTime = now;
+
+    // Ember state — tapping revives the dying fire
+    if (gameState.isEmber()) {
+      const revived = gameState.reviveFromEmber();
+      if (revived) {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        particles.sparkBurst(fireCenterX * dpr, fireCenterY * dpr, 8);
+        soundManager.playClick();
+      }
+      return; // skip normal click processing
+    }
+
+    // Completely extinguished — ignore taps (match re-strike handled elsewhere)
+    if (gameState.isExtinguished()) {
+      return;
+    }
 
     // Add fuel
     const fuelValue = gameState.addClickFuel();
@@ -183,6 +219,16 @@ function handleBurnItem(categoryId, itemIndex) {
 
   const { name, rarity, burnValue, effectType, xpGain, ashGain, emberGain, combo, comboMultiplier } = result;
 
+  // Look up flameColor from item data (6th element)
+  const itemRow = ITEMS[categoryId] && ITEMS[categoryId][itemIndex];
+  const flameColor = itemRow ? (itemRow[5] || null) : null;
+
+  // Toothpick: add to visual pile before throwing
+  const isToothpick = (categoryId === 'wood' && name === '이쑤시개');
+  if (isToothpick) {
+    toothpickLayer.addToothpick();
+  }
+
   // Throw animation
   const startX = window.innerWidth / 2;
   const startY = window.innerHeight * 0.85;
@@ -190,7 +236,12 @@ function handleBurnItem(categoryId, itemIndex) {
 
   throwItem(icon, startX, startY, fireCenterX, fireCenterY, () => {
     // After throw animation completes, trigger effects
-    executeItemEffect(effectType, burnValue, rarity);
+    executeItemEffect(effectType, burnValue, rarity, flameColor);
+
+    // Toothpick: animate the burn
+    if (isToothpick) {
+      toothpickLayer.burnToothpick();
+    }
 
     // Floating numbers
     const size = rarity >= 5 ? 'mega' : rarity >= 3 ? 'big' : 'normal';
@@ -218,7 +269,7 @@ function handleBurnItem(categoryId, itemIndex) {
 }
 
 // ============ EFFECT EXECUTION ============
-function executeItemEffect(effectType, burnValue, rarity) {
+function executeItemEffect(effectType, burnValue, rarity, flameColor = null) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const cx = fireCenterX * dpr;
   const cy = fireCenterY * dpr;
@@ -382,6 +433,13 @@ function executeItemEffect(effectType, burnValue, rarity) {
         }, 300 + i * 400);
       }
       break;
+  }
+
+  // Apply per-item flame color tint (overrides default fire color briefly)
+  if (flameColor) {
+    const [fr, fg, fb] = flameColor;
+    const duration = 2 + rarity * 0.5;
+    fireEngine.setTint([fr / 200, fg / 200, fb / 200], duration);
   }
 }
 

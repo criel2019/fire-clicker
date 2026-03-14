@@ -13,13 +13,10 @@ function xpForLevel(level) {
   return Math.floor(50 * Math.pow(1.15, level - 1));
 }
 
-// Temperature decay rate per second — very slow for realistic campfire
-const TEMP_DECAY_RATE = 0.4;
-const BASE_TEMP = 600;   // Campfire baseline (~0.8 intensity, always visible)
-const MAX_TEMP = 1000;   // Max reachable (toothpick flare)
-
-// Idle fuel: just enough to keep base campfire alive
-const IDLE_FUEL_RATE = 0.05;
+// Temperature decay rate per second
+const TEMP_DECAY_RATE = 0.8;
+const BASE_TEMP = 0;     // No auto-recovery — fire must be fed
+const MAX_TEMP = 1000;   // Max reachable temperature
 
 export class GameState {
   constructor() {
@@ -29,7 +26,7 @@ export class GameState {
     this.totalXp = 0;
     this.ash = 0; // basic currency
     this.ember = 0; // premium currency
-    this.temperature = BASE_TEMP;
+    this.temperature = 200; // Small fire right after striking a match
     this.baseIntensity = 0.4;
     this.totalBurned = 0;
     this.combo = 0;
@@ -42,9 +39,10 @@ export class GameState {
     this.totalPlayTime = 0;
     this.lastSaveTime = Date.now();
     this.lastActiveTime = Date.now();
+    this.burnLog = []; // Array of { name, icon, timestamp, burnValue, rarity, effectType }
     this.stats = {
       totalClicks: 0,
-      highestTemp: BASE_TEMP,
+      highestTemp: 200,
       longestCombo: 0,
       itemsBurnedTotal: 0,
       explosionsTriggered: 0,
@@ -85,18 +83,44 @@ export class GameState {
 
   /**
    * Get current fire intensity based on temperature
+   * temp 0 = 0.0 (extinguished), temp 1000 = 1.5 (max)
+   * Ember state (temp < 50): 0.0~0.15 (barely visible)
    */
   getFireIntensity() {
-    // 600°C (BASE) = 0.80 (nice campfire), 1000°C (MAX) = 1.50 (lively fire)
-    const t = Math.max(0, Math.min(1, (this.temperature - BASE_TEMP) / (MAX_TEMP - BASE_TEMP)));
-    return 0.80 + t * 0.70;
+    const t = Math.max(0, Math.min(1, this.temperature / MAX_TEMP));
+    return t * 1.5;
   }
 
   /**
-   * Add fuel (from clicking fire) — tiny nudge to campfire
+   * True when fire is a dying ember (not yet out)
+   */
+  isEmber() {
+    return this.temperature > 0 && this.temperature < 50;
+  }
+
+  /**
+   * True when fire is completely extinguished
+   */
+  isExtinguished() {
+    return this.temperature <= 0;
+  }
+
+  /**
+   * Revive a dying ember by blowing on it / tapping
+   */
+  reviveFromEmber() {
+    if (this.temperature > 0 && this.temperature < 80) {
+      this.temperature = Math.min(150, this.temperature + 40);
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Add fuel (from clicking fire) — small nudge that keeps embers alive
    */
   addClickFuel() {
-    const fuelValue = 0.8 + this.level * 0.04;
+    const fuelValue = 2 + this.level * 0.05;
     this.temperature = Math.min(MAX_TEMP, this.temperature + fuelValue);
     this.ash += 1;
     this.stats.totalClicks++;
@@ -121,8 +145,8 @@ export class GameState {
     const comboMultiplier = 1 + (this.combo - 1) * 0.15;
     const actualBurnValue = Math.floor(burnValue * comboMultiplier);
 
-    // Apply burn — toothpick (burnValue=1) adds ~1.5 temp, fades quickly
-    this.temperature = Math.min(MAX_TEMP, this.temperature + actualBurnValue * 1.5);
+    // Apply burn — toothpick (burnValue=1): +2.5 temp, fades in 5~6 seconds
+    this.temperature = Math.min(MAX_TEMP, this.temperature + actualBurnValue * 2.5);
 
     // XP gain
     const xpGain = Math.floor(burnValue * 0.5 * comboMultiplier);
@@ -153,7 +177,7 @@ export class GameState {
     // Check achievements
     this._checkAchievements();
 
-    return {
+    const result = {
       name,
       rarity,
       burnValue: actualBurnValue,
@@ -165,6 +189,32 @@ export class GameState {
       combo: this.combo,
       comboMultiplier,
     };
+
+    // Record in burn log
+    this.addBurnLog({
+      name: result.name,
+      icon: result.name.substring(0, 2),
+      burnValue: result.burnValue,
+      rarity: result.rarity,
+      effectType: result.effectType,
+    });
+
+    return result;
+  }
+
+  /**
+   * Add an entry to the burn log (most recent first, max 100)
+   */
+  addBurnLog(entry) {
+    this.burnLog.unshift({ ...entry, timestamp: Date.now() });
+    if (this.burnLog.length > 100) this.burnLog.pop(); // max 100 entries
+  }
+
+  /**
+   * Get the burn log
+   */
+  getBurnLog() {
+    return this.burnLog;
   }
 
   /**
@@ -218,17 +268,11 @@ export class GameState {
    * Per-frame update
    */
   update(dt) {
-    // Temperature slowly decays toward BASE_TEMP — realistic campfire cooling
-    if (this.temperature > BASE_TEMP) {
-      // Faster decay only when well above baseline (high flares die fast)
-      const excess = this.temperature - BASE_TEMP;
-      const decayRate = TEMP_DECAY_RATE + excess * 0.003;
-      this.temperature = Math.max(BASE_TEMP, this.temperature - decayRate * dt);
-    }
-
-    // Below baseline: idle fuel slowly brings it back up
-    if (this.temperature < BASE_TEMP) {
-      this.temperature = Math.min(BASE_TEMP, this.temperature + IDLE_FUEL_RATE * dt * 10);
+    // Temperature decays over time — including ember state
+    // Higher temperature decays faster (big fires burn through fuel quickly)
+    if (this.temperature > 0) {
+      const decayRate = TEMP_DECAY_RATE + (this.temperature / MAX_TEMP) * 1.5;
+      this.temperature = Math.max(0, this.temperature - decayRate * dt);
     }
 
     // Combo decay
@@ -241,7 +285,7 @@ export class GameState {
     }
 
     // Idle ash generation (slow)
-    this.ash += IDLE_FUEL_RATE * 0.05 * this.level * dt;
+    this.ash += 0.05 * 0.05 * this.level * dt;
 
     // Play time
     this.totalPlayTime += dt;
@@ -325,15 +369,23 @@ export class GameState {
 
   /**
    * Process idle gains when returning to the game
+   * Calculates offline temperature decay — fire slowly dies but embers linger
    */
   _processIdleGains() {
     const now = Date.now();
     const idleTime = Math.min((now - this.lastActiveTime) / 1000, 3600 * 8); // max 8 hours
 
-    if (idleTime > 60) { // at least 1 minute
-      const idleAsh = Math.floor(idleTime * IDLE_FUEL_RATE * this.level * 0.5);
+    if (idleTime > 10) {
+      // Simulate temperature decay over idle period
+      // Use average decay rate for simplicity
+      const avgDecayRate = TEMP_DECAY_RATE + (this.temperature / MAX_TEMP) * 1.5;
+      const idleDecay = avgDecayRate * idleTime;
+      // Keep a tiny ember alive — fire doesn't vanish instantly
+      this.temperature = Math.max(5, this.temperature - idleDecay);
+
+      // Small idle ash gain
+      const idleAsh = Math.floor(idleTime * 0.05 * this.level * 0.5);
       this.ash += idleAsh;
-      // Don't show notification for now, but could add one
     }
 
     this.lastActiveTime = now;
@@ -361,6 +413,7 @@ export class GameState {
       stats: this.stats,
       lastSaveTime: Date.now(),
       lastActiveTime: Date.now(),
+      burnLog: this.burnLog,
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -385,7 +438,7 @@ export class GameState {
       this.totalXp = data.totalXp || 0;
       this.ash = data.ash || 0;
       this.ember = data.ember || 0;
-      this.temperature = data.temperature || BASE_TEMP;
+      this.temperature = data.temperature ?? 200;
       this.baseIntensity = data.baseIntensity || 0.4;
       this.totalBurned = data.totalBurned || 0;
       this.maxCombo = data.maxCombo || 0;
@@ -396,6 +449,7 @@ export class GameState {
       this.stats = { ...this.stats, ...data.stats };
       this.lastSaveTime = data.lastSaveTime || Date.now();
       this.lastActiveTime = data.lastActiveTime || Date.now();
+      this.burnLog = data.burnLog || [];
 
       return true;
     } catch (e) {

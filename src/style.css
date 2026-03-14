@@ -73,6 +73,10 @@ canvas {
 #bgCanvas {
   z-index: 0;
 }
+#toothpickCanvas {
+  z-index: 2;
+  mix-blend-mode: normal;
+}
 #particleCanvas {
   z-index: 3;
 }
@@ -907,4 +911,144 @@ canvas {
   font-size: 14px;
   color: var(--text-dim);
   letter-spacing: 4px;
+}
+
+/* === Intro Overlay === */
+#introOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 200;
+  background: #000;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#introCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+  z-index: 0;
+  filter: none !important;  /* override the global canvas filter */
+  mix-blend-mode: normal !important;
+}
+
+#introTapText {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(52px, 13vw, 100px);
+  font-weight: 300;
+  letter-spacing: 0.4em;
+  color: rgba(255, 200, 100, 0);
+  text-shadow:
+    0 0 40px rgba(255, 140, 40, 0),
+    0 0 80px rgba(255, 90, 20, 0);
+  transition: color 0.7s ease, text-shadow 0.7s ease;
+  pointer-events: none;
+  padding-left: 0.4em; /* compensate letter-spacing */
+}
+
+#introTapText.show {
+  color: rgba(255, 200, 100, 0.85);
+  text-shadow:
+    0 0 40px rgba(255, 140, 40, 0.5),
+    0 0 80px rgba(255, 90, 20, 0.25);
+  animation: introPulse 1.6s ease-in-out infinite;
+}
+
+@keyframes introPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.35; }
+}
+
+/* ============================================
+   NPC Canvas + Burn Log — Track C additions
+   ============================================ */
+
+/* NPC Canvas */
+#npcCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 4; /* above particleCanvas z:3 */
+  pointer-events: none;
+}
+
+/* Burn Log Button */
+#burnLogBtn {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 4px;
+  transition: opacity 0.2s;
+  pointer-events: auto;
+}
+#burnLogBtn:hover { opacity: 1; }
+
+/* Burn Log Panel */
+#burnLogPanel {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 60vh;
+  background: rgba(10, 5, 0, 0.92);
+  border-top: 1px solid rgba(255, 120, 20, 0.3);
+  border-radius: 16px 16px 0 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+#burnLogPanel.open {
+  transform: translateY(0);
+}
+#burnLogPanel.hidden {
+  display: none;
+}
+#burnLogHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 120, 20, 0.2);
+  color: rgba(255, 200, 100, 0.9);
+  font-size: 1rem;
+}
+#burnLogClose {
+  background: none;
+  border: none;
+  color: rgba(255, 200, 100, 0.7);
+  font-size: 1.4rem;
+  cursor: pointer;
+  padding: 0 4px;
+}
+#burnLogList {
+  overflow-y: auto;
+  flex: 1;
+  padding: 8px 0;
+}
+.burn-log-entry {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.bl-icon { font-size: 1.2rem; width: 28px; text-align: center; }
+.bl-name { flex: 1; color: rgba(255, 220, 160, 0.9); font-size: 0.85rem; }
+.bl-value { color: rgba(255, 150, 50, 0.9); font-size: 0.8rem; font-weight: bold; }
+.bl-time { color: rgba(255, 255, 255, 0.3); font-size: 0.75rem; min-width: 50px; text-align: right; }
+.burn-log-entry.rarity-5,
+.burn-log-entry.rarity-6 {
+  background: rgba(255, 215, 0, 0.05);
 }

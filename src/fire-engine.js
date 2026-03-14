@@ -84,6 +84,16 @@ export class FireEngine {
 
   // ── Seed the campfire heat source at the bottom rows ──
   _seedHeat(intensity) {
+    // Completely extinguished — zero out the bottom seed rows
+    if (intensity < 0.01) {
+      for (let x = 0; x < SIM_W; x++) {
+        this.pixels[(SIM_H - 1) * SIM_W + x] = 0;
+        this.pixels[(SIM_H - 2) * SIM_W + x] = 0;
+        this.pixels[(SIM_H - 3) * SIM_W + x] = 0;
+      }
+      return;
+    }
+
     const maxHeat = Math.round(36 * Math.min(1.0, intensity * 0.98));
     const cx = SIM_W * 0.5;
 
@@ -152,7 +162,7 @@ export class FireEngine {
   }
 
   setBaseIntensity(val) {
-    this.targetIntensity = Math.max(0.80, Math.min(val, 1.5));
+    this.targetIntensity = Math.max(0, Math.min(val, 1.5)); // 0.80 floor removed — fire can die
   }
 
   setWind(val) {
@@ -202,11 +212,15 @@ export class FireEngine {
 
     ctx.clearRect(0, 0, cw, ch);
 
-    // Fire position: centered, base at 72% screen height (where the logs are)
-    const fireW = cw * 0.38;
-    const fireH = ch * 0.36;
+    // Fire size scales with intensity (0.5 at zero → 1.0 at full)
+    const sizeScale = 0.5 + Math.min(1, this.intensity / 1.0) * 0.5;
+    const fireW = cw * 0.38 * sizeScale;
+    const fireH = ch * 0.36 * (0.6 + sizeScale * 0.4);
     const fireX = (cw - fireW) * 0.5;
     const fireY = ch * 0.72 - fireH;
+
+    // Glow multiplier: ember state gets almost no glow; active fire gets full glow
+    const glowMult = Math.min(1, this.intensity / 0.8);
 
     ctx.save();
     ctx.imageSmoothingEnabled = true;
@@ -214,19 +228,19 @@ export class FireEngine {
 
     // Draw glow layers for volumetric depth
     // Outer soft halo
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.18 * glowMult;
     ctx.drawImage(this._off,
       fireX - fireW * 0.25, fireY - fireH * 0.18,
       fireW * 1.5,          fireH * 1.36);
 
     // Mid glow
-    ctx.globalAlpha = 0.42;
+    ctx.globalAlpha = 0.42 * glowMult;
     ctx.drawImage(this._off,
       fireX - fireW * 0.10, fireY - fireH * 0.06,
       fireW * 1.2,          fireH * 1.12);
 
-    // Core fire — full opacity
-    ctx.globalAlpha = 1.0;
+    // Core fire — scales with intensity, minimum visibility when ember
+    ctx.globalAlpha = Math.max(0.1, 1.0 * this.intensity / 0.8);
     ctx.drawImage(this._off, fireX, fireY, fireW, fireH);
 
     ctx.restore();

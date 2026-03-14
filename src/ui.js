@@ -11,6 +11,7 @@ export class UI {
     this.onBurnItem = onBurnItem;
     this.isDrawerOpen = false;
     this.isAmbientMode = false;
+    this.burnLogOpen = false;
     this.currentCategory = null;
     this.selectedItem = null;
     this._touchStartY = 0;
@@ -24,6 +25,7 @@ export class UI {
     this._setupAmbientToggle();
     this._setupModal();
     this._setupToothpick();
+    this._setupBurnLog();
     this._renderCategories();
   }
 
@@ -351,5 +353,105 @@ export class UI {
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
     return String(num);
+  }
+
+  // ─── Burn Log ────────────────────────────────────────────────────────────────
+
+  /**
+   * Create the burn log panel DOM and wire up the HUD button
+   */
+  _setupBurnLog() {
+    // Create panel
+    const panel = document.createElement('div');
+    panel.id = 'burnLogPanel';
+    panel.className = 'hidden';
+    panel.innerHTML = `
+      <div id="burnLogHeader">
+        <span>연소 일지 📖</span>
+        <button id="burnLogClose">×</button>
+      </div>
+      <div id="burnLogList"></div>
+    `;
+    document.getElementById('app').appendChild(panel);
+
+    // Close button
+    panel.querySelector('#burnLogClose').addEventListener('click', () => this.hideBurnLog());
+
+    // HUD button
+    const btn = document.getElementById('burnLogBtn');
+    if (btn) {
+      btn.addEventListener('click', () => {
+        if (this.burnLogOpen) {
+          this.hideBurnLog();
+        } else {
+          this.showBurnLog();
+        }
+      });
+    }
+  }
+
+  /**
+   * Show the burn log panel (slide up)
+   */
+  showBurnLog() {
+    const panel = document.getElementById('burnLogPanel');
+    if (!panel) return;
+    this.burnLogOpen = true;
+    panel.classList.remove('hidden');
+    // Allow paint before adding 'open' to trigger CSS transition
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        panel.classList.add('open');
+      });
+    });
+    this.renderBurnLogEntries();
+  }
+
+  /**
+   * Hide the burn log panel (slide down)
+   */
+  hideBurnLog() {
+    const panel = document.getElementById('burnLogPanel');
+    if (!panel) return;
+    this.burnLogOpen = false;
+    panel.classList.remove('open');
+    // Wait for transition to finish before hiding
+    panel.addEventListener('transitionend', () => {
+      if (!this.burnLogOpen) {
+        panel.classList.add('hidden');
+      }
+    }, { once: true });
+  }
+
+  /**
+   * Populate the burn log list with current entries
+   */
+  renderBurnLogEntries() {
+    const list = document.getElementById('burnLogList');
+    if (!list) return;
+    const entries = this.game.getBurnLog();
+    if (entries.length === 0) {
+      list.innerHTML = '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:0.85rem;">아직 태운 것이 없습니다</div>';
+      return;
+    }
+    list.innerHTML = entries.map(entry => `
+      <div class="burn-log-entry rarity-${entry.rarity}">
+        <span class="bl-icon">${entry.icon}</span>
+        <span class="bl-name">${entry.name}</span>
+        <span class="bl-value">+${entry.burnValue}</span>
+        <span class="bl-time">${this._relTime(entry.timestamp)}</span>
+      </div>
+    `).join('');
+  }
+
+  /**
+   * Human-readable relative time (Korean)
+   */
+  _relTime(ts) {
+    const diff = Date.now() - ts;
+    if (diff < 60000) return '방금';
+    if (diff < 3600000) return `${Math.floor(diff / 60000)}분 전`;
+    if (diff < 86400000) return `${Math.floor(diff / 3600000)}시간 전`;
+    return `${Math.floor(diff / 86400000)}일 전`;
   }
 }

@@ -270,6 +270,7 @@ export class ParticleSystem {
     };
     this.fireCenter = { x: 0.5, y: 0.7 }; // normalized
     this.intensity = 0.5;
+    this.emberRate = 0.6; // computed by setIntensity()
     this.wind = 0;
     this.maxParticles = 500;
   }
@@ -284,14 +285,23 @@ export class ParticleSystem {
     }
   }
 
-  setIntensity(val) {
-    this.intensity = val;
-    // More embers at higher intensity — campfire always emits decent amount
-    const baseEmber = 0.06;   // emit every 60ms at minimum
-    const baseSmoke = 0.45;
-    this.emitters.ember.rate = Math.max(0.025, baseEmber / Math.max(0.5, val));
-    this.emitters.smoke.rate = Math.max(0.18, baseSmoke / Math.max(0.5, val));
-    this.emitters.ash.rate   = Math.max(0.6, 2.0 / Math.max(0.5, val));
+  setIntensity(intensity) {
+    this.intensity = intensity;
+    // intensity < 0.2: no embers; intensity > 0.8: full activity
+    this.emberRate = Math.max(0, intensity - 0.2) * 2;
+
+    if (intensity < 0.01) {
+      // Fire is out — stop all emitters
+      this.emitters.ember.rate = 999;
+      this.emitters.smoke.rate = 999;
+      this.emitters.ash.rate   = 999;
+    } else {
+      const baseEmber = 0.06;
+      const baseSmoke = 0.45;
+      this.emitters.ember.rate = Math.max(0.025, baseEmber / Math.max(0.5, intensity));
+      this.emitters.smoke.rate = Math.max(0.18,  baseSmoke / Math.max(0.5, intensity));
+      this.emitters.ash.rate   = Math.max(0.6,   2.0       / Math.max(0.5, intensity));
+    }
   }
 
   setWind(val) {
@@ -402,11 +412,13 @@ export class ParticleSystem {
   update(dt) {
     // Auto-emit based on fire intensity
     if (this.intensity > 0.1) {
-      // Embers
-      this.emitters.ember.timer -= dt;
-      if (this.emitters.ember.timer <= 0) {
-        this.emitEmber(Math.ceil(this.intensity));
-        this.emitters.ember.timer = this.emitters.ember.rate;
+      // Embers — only emit when intensity is above the ember threshold
+      if (this.intensity > 0.2) {
+        this.emitters.ember.timer -= dt;
+        if (this.emitters.ember.timer <= 0) {
+          this.emitEmber(Math.ceil(this.intensity));
+          this.emitters.ember.timer = this.emitters.ember.rate;
+        }
       }
 
       // Smoke
