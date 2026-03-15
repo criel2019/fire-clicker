@@ -141,6 +141,12 @@ function gameLoop(timestamp) {
   if (Math.floor(timestamp / 200) !== Math.floor((timestamp - dt * 1000) / 200)) {
     ui.updateHUD();
 
+    // Update heat shimmer visibility
+    const shimmer = document.getElementById('heatShimmer');
+    if (shimmer) {
+      shimmer.classList.toggle('active', intensity > 0.25);
+    }
+
     // Show/hide restart hint when fire is extinguished
     const hint = document.getElementById('restartHint');
     if (hint) {

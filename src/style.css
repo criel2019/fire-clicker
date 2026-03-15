@@ -65,7 +65,7 @@ canvas {
 #fireCanvas {
   z-index: 2;
   mix-blend-mode: screen;
-  filter: blur(2.5px) saturate(1.2) brightness(1.05);
+  filter: blur(2px) saturate(1.35) brightness(1.08) contrast(1.05);
 }
 #groundCanvas {
   z-index: 1;
@@ -98,6 +98,62 @@ canvas {
   z-index: 1;
   pointer-events: none;
   transition: opacity 0.5s;
+  animation: glowShimmer 4s ease-in-out infinite;
+}
+
+@keyframes glowShimmer {
+  0%, 100% { transform: translateX(-50%) scaleX(1) scaleY(1); }
+  25% { transform: translateX(-50.3%) scaleX(1.015) scaleY(0.995); }
+  50% { transform: translateX(-49.7%) scaleX(0.99) scaleY(1.008); }
+  75% { transform: translateX(-50.1%) scaleX(1.008) scaleY(1.003); }
+}
+
+/* === Heat Shimmer (atmospheric distortion above fire) === */
+#heatShimmer {
+  position: absolute;
+  bottom: 38%;
+  left: 25%;
+  width: 50%;
+  height: 22%;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 3s;
+  mask-image: linear-gradient(to top,
+    rgba(0,0,0,0.4) 0%,
+    rgba(0,0,0,0.15) 50%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(to top,
+    rgba(0,0,0,0.4) 0%,
+    rgba(0,0,0,0.15) 50%,
+    transparent 100%
+  );
+}
+
+#heatShimmer.active {
+  opacity: 1;
+  backdrop-filter: blur(0.3px);
+  -webkit-backdrop-filter: blur(0.3px);
+  animation: shimmerWave 3.5s ease-in-out infinite;
+}
+
+@keyframes shimmerWave {
+  0%, 100% {
+    backdrop-filter: blur(0.2px);
+    -webkit-backdrop-filter: blur(0.2px);
+    transform: translateY(0) scaleX(1);
+  }
+  30% {
+    backdrop-filter: blur(0.5px);
+    -webkit-backdrop-filter: blur(0.5px);
+    transform: translateY(-1px) scaleX(1.008);
+  }
+  60% {
+    backdrop-filter: blur(0.3px);
+    -webkit-backdrop-filter: blur(0.3px);
+    transform: translateY(-0.5px) scaleX(0.995);
+  }
 }
 
 /* === Fireworks Container === */

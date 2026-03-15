@@ -278,13 +278,22 @@ export function tapRipple(x, y) {
 export function updateFireGlow(intensity) {
   const glow = document.getElementById('fireGlow');
   if (!glow) return;
-  // At intensity 0.8 (baseline) alpha=0.18 — always a visible warm glow
-  const alpha = Math.min(0.38, intensity * 0.22);
-  const spread = 65 + intensity * 12;
+
+  // Multi-frequency pulse for dancing fire light
+  const t = performance.now();
+  const pulse = 1.0
+    + Math.sin(t / 900) * 0.06
+    + Math.sin(t / 380 + 1.2) * 0.03
+    + Math.sin(t / 2100) * 0.04;
+
+  const alpha = Math.min(0.42, intensity * 0.24) * pulse;
+  const spread = 65 + intensity * 14;
+
   glow.style.background = `radial-gradient(ellipse at 50% 80%,
-    rgba(255,110,20,${alpha}) 0%,
-    rgba(220,65,12,${alpha * 0.55}) 28%,
-    rgba(140,35,5,${alpha * 0.28}) 50%,
+    rgba(255,125,30,${alpha}) 0%,
+    rgba(245,80,18,${alpha * 0.55}) 22%,
+    rgba(200,50,10,${alpha * 0.32}) 40%,
+    rgba(120,28,5,${alpha * 0.14}) 58%,
     transparent ${spread}%
   )`;
 }

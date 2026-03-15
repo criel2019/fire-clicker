@@ -49,6 +49,8 @@ class Particle {
         this.opacity = 0.04 + Math.random() * 0.07;
         this.rotation = Math.random() * Math.PI * 2;
         this.rotSpeed = (Math.random() - 0.5) * 0.35;
+        this.wobblePhase = Math.random() * Math.PI * 2;
+        this.wobbleAmp = 0.5 + Math.random() * 1.0;
         break;
 
       case 'ash':
@@ -127,9 +129,12 @@ class Particle {
       case 'smoke':
         this.x += this.vx * dt;
         this.y += this.vy * dt;
-        this.size += dt * 8;
+        // Curl/wobble — smoke billows side to side as it rises
+        this.x += Math.sin(this.wobblePhase + performance.now() / 1200 * 1.5) * this.wobbleAmp * dt * 28;
+        this.size += dt * 10;
         this.rotation += this.rotSpeed * dt;
         this.vx *= 0.99;
+        this.vy *= 0.998; // slower deceleration — smoke rises higher
         break;
 
       case 'ash':
@@ -267,6 +272,7 @@ export class ParticleSystem {
       ember: { timer: 0, rate: 0.08 },
       smoke: { timer: 0, rate: 0.5 },
       ash: { timer: 0, rate: 1.0 },
+      crackle: { timer: 2 + Math.random() * 3, rate: 3.0 },
     };
     this.fireCenter = { x: 0.5, y: 0.7 }; // normalized
     this.intensity = 0.5;
@@ -358,6 +364,29 @@ export class ParticleSystem {
   }
 
   /**
+   * Emit crackle sparks (random pops from fire — auto-emitted)
+   */
+  emitCrackle() {
+    const w = this.canvas.width;
+    const h = this.canvas.height;
+    const cx = w * this.fireCenter.x;
+    const baseY = h * this.fireCenter.y;
+
+    const n = 1 + Math.floor(Math.random() * 3); // 1-3 sparks per crackle
+    for (let i = 0; i < n; i++) {
+      if (this.particles.length >= this.maxParticles) break;
+      const x = cx + (Math.random() - 0.5) * w * 0.08;
+      const y = baseY - Math.random() * h * 0.12;
+      // Upward-biased angle
+      const angle = -Math.PI * (0.2 + Math.random() * 0.6);
+      this.particles.push(new Particle(x, y, 'spark', {
+        angle,
+        speed: 30 + Math.random() * 100,
+      }));
+    }
+  }
+
+  /**
    * Create a burst of sparks (when item is thrown)
    */
   sparkBurst(x, y, count = 20) {
@@ -433,6 +462,15 @@ export class ParticleSystem {
       if (this.emitters.ash.timer <= 0) {
         this.emitAsh();
         this.emitters.ash.timer = this.emitters.ash.rate;
+      }
+
+      // Crackle sparks (random pops — the sound of a campfire)
+      if (this.intensity > 0.3) {
+        this.emitters.crackle.timer -= dt;
+        if (this.emitters.crackle.timer <= 0) {
+          this.emitCrackle();
+          this.emitters.crackle.timer = 1.5 + Math.random() * 4; // 1.5-5.5s random interval
+        }
       }
     }
 
