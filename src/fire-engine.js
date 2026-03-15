@@ -1,7 +1,15 @@
 /**
  * fire-engine.js
- * WebGL shader-based fire simulation for 불멍-quality campfire
- * Uses Simplex noise FBM with domain warping for organic, mesmerizing flames
+ * WebGL campfire shader — 불멍 quality
+ *
+ * Complete rewrite:
+ * - Multi-tongue flame structure via edge noise
+ * - Curl-noise domain warping for organic swirl
+ * - Height-accelerated advection (convection physics)
+ * - Temperature-based color = f(density, height)
+ * - Rotated FBM octaves to eliminate axis-aligned artifacts
+ * - Proper campfire taper (wide base → narrow tips)
+ * - Sharp, defined tongue edges at tips
  */
 
 // ── Vertex shader ──
@@ -25,7 +33,7 @@ uniform vec3  u_tint;
 uniform vec2  u_resolution;
 uniform float u_breath;
 
-// ── Simplex 2D Noise (Ashima Arts) ──
+// ── Simplex 2D noise (Ashima Arts) ──
 vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
 vec2 mod289v2(vec2 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
 vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
@@ -33,44 +41,47 @@ vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
 float snoise(vec2 v) {
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
                      -0.577350269189626, 0.024390243902439);
-  vec2 i = floor(v + dot(v, C.yy));
-  vec2 x0= v - i + dot(i, C.xx);
-  vec2 i1= (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  vec4 x12= x0.xyxy + C.xxzz;
+  vec2 i  = floor(v + dot(v, C.yy));
+  vec2 x0 = v - i + dot(i, C.xx);
+  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+  vec4 x12 = x0.xyxy + C.xxzz;
   x12.xy -= i1;
   i = mod289v2(i);
-  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
-  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy), dot(x12.zw,x12.zw)), 0.0);
+  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
+                           + i.x + vec3(0.0, i1.x, 1.0));
+  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy),
+                           dot(x12.zw,x12.zw)), 0.0);
   m = m*m; m = m*m;
   vec3 x = 2.0 * fract(p * C.www) - 1.0;
   vec3 h = abs(x) - 0.5;
-  vec3 ox= floor(x + 0.5);
-  vec3 a0= x - ox;
+  vec3 ox = floor(x + 0.5);
+  vec3 a0 = x - ox;
   m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
   vec3 g;
-  g.x = a0.x * x0.x  + h.x * x0.y;
-  g.yz= a0.yz* x12.xz + h.yz* x12.yw;
+  g.x  = a0.x * x0.x  + h.x * x0.y;
+  g.yz = a0.yz* x12.xz + h.yz* x12.yw;
   return 130.0 * dot(m, g);
 }
 
-// ── FBM with 5 octaves ──
-float fbm5(vec2 p) {
+// Rotation matrix between FBM octaves — breaks axis-aligned banding
+const mat2 FBM_ROT = mat2(0.8, 0.6, -0.6, 0.8);
+
+float fbm4(vec2 p) {
   float v = 0.0, a = 0.5;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i < 4; i++) {
     v += a * snoise(p);
     a *= 0.5;
-    p *= 2.0;
+    p = FBM_ROT * p * 2.0;
   }
   return v;
 }
 
-// ── FBM with 3 octaves (for warping — faster) ──
 float fbm3(vec2 p) {
   float v = 0.0, a = 0.5;
   for (int i = 0; i < 3; i++) {
     v += a * snoise(p);
     a *= 0.5;
-    p *= 2.0;
+    p = FBM_ROT * p * 2.0;
   }
   return v;
 }
@@ -78,99 +89,179 @@ float fbm3(vec2 p) {
 void main() {
   vec2 uv = v_uv;
   float aspect = u_resolution.x / u_resolution.y;
+  float t = u_time;
+  float intCl = clamp(u_intensity, 0.0, 1.5);
 
   // ── Fire coordinate system ──
-  // Base of fire at 72% from top, fire extends upward
+  // Contained proportions — campfire, not inferno
   float fireBaseY = 0.72;
-  float intClamped = clamp(u_intensity, 0.0, 1.5);
-  float fireHeight = 0.28 + intClamped * 0.10;  // taller with more intensity
-  float fireWidth  = 0.16 + intClamped * 0.04;  // wider with more intensity
+  float fireHeight = 0.20 + intCl * 0.07;
+  float fireWidth  = 0.12 + intCl * 0.025;
 
-  // Transform to fire-local coords: y=0 at base, y=1 at top
+  // fUV: x=0 centered, y=0 at base, y=1 at tip
   vec2 fUV = vec2(
     (uv.x - 0.5) * aspect / fireWidth,
     -(uv.y - fireBaseY) / fireHeight
   );
 
-  // Early exit for pixels outside fire region (saves GPU)
-  if (fUV.y < -0.2 || fUV.y > 1.5 || abs(fUV.x) > 2.5) {
+  // Early exit — skip pixels far from fire
+  if (fUV.y < -0.15 || fUV.y > 1.4 || abs(fUV.x) > 2.5) {
     gl_FragColor = vec4(0.0);
     return;
   }
 
-  float t = u_time;
-
-  // ── Wind displacement (quadratic — stronger at top) ──
-  float windDisp = u_wind * fUV.y * fUV.y * 0.35;
-  fUV.x += windDisp;
-
-  // ── Breathing modulation ──
-  float breath = 1.0 + u_breath * 0.07;
-
-  // ── Fire shape mask ──
-  // Width tapers from base to tip
   float h01 = clamp(fUV.y, 0.0, 1.0);
-  float widthAtH = mix(1.0, 0.12, pow(h01, 0.55));
-  float xFade = 1.0 - smoothstep(0.0, widthAtH, abs(fUV.x));
-  float yFade = smoothstep(-0.05, 0.10, fUV.y)
-              * (1.0 - smoothstep(0.55, 1.05, fUV.y));
-  float shape = xFade * yFade;
 
-  // ── Domain warping for organic turbulence ──
+  // ── Wind: height-dependent lean ──
+  fUV.x += u_wind * h01 * h01 * 0.4;
+
+  // ── Convection: flames accelerate upward ──
+  float advect = 1.0 + h01 * 2.5;
+
+
+  // ═══════════════════════════════════════
+  //  SHAPE: proper campfire taper + tongues
+  // ═══════════════════════════════════════
+
+  // Base shape: slightly pinched at embers, wide just above, tapering to tip
+  float basePinch = smoothstep(0.0, 0.08, h01);
+  float taper     = pow(1.0 - h01, 1.1);
+  float rawWidth  = basePinch * taper;
+
+  // Tongue edge noise — creates flame tongue protrusions
+  // Major tongues: 2-3 wide, slow-rolling protrusions
+  float tng1 = snoise(vec2(fUV.x * 2.5 + 0.5, fUV.y * 2.0 - t * 1.2));
+  // Secondary tongues: narrower, faster
+  float tng2 = snoise(vec2(fUV.x * 5.5 - 1.2, fUV.y * 3.5 - t * 2.0));
+  // Fine turbulence: tip shimmer
+  float tng3 = snoise(vec2(fUV.x * 10.0 + 2.0, fUV.y * 5.0 - t * 3.2));
+
+  // Tongue intensity grows with height: base is smooth, tips are wild
+  float tongueStr = h01 * h01;
+  float tongueOffset = (tng1 * 0.28 + tng2 * 0.13 + tng3 * 0.06) * tongueStr;
+
+  float modWidth = max(rawWidth + tongueOffset * 0.35, 0.0);
+
+  // Edge sharpness: soft glow at base, crisp defined tongues at tips
+  float edgeSoft = mix(0.22, 0.025, h01);
+  float xMask = smoothstep(modWidth, modWidth - edgeSoft, abs(fUV.x));
+
+  // Y fade: gentle entry, long natural fadeout
+  float yFade = smoothstep(-0.02, 0.06, fUV.y)
+              * (1.0 - smoothstep(0.60, 1.12, fUV.y));
+
+  float shape = xMask * yFade;
+
+
+  // ═══════════════════════════════════════
+  //  DOMAIN WARPING (curl-noise inspired)
+  // ═══════════════════════════════════════
+
+  vec2 warpSeed = fUV * 2.5;
+  warpSeed.y -= t * advect * 0.3;
+
   vec2 q = vec2(
-    fbm3(fUV * 2.0 + vec2(t * 0.35, t * 0.1)),
-    fbm3(fUV * 2.0 + vec2(t * 0.1, t * 0.45) + 5.2)
+    fbm3(warpSeed + vec2(t * 0.32, 0.0)),
+    fbm3(warpSeed + vec2(0.0, t * 0.38) + 5.2)
   );
+
+  // Curl direction: perpendicular to warp gradient → swirl, not stretch
+  vec2 curlWarp = vec2(q.y, -q.x) * 0.5;
+
+  vec2 warpedUV = fUV * 3.5 + curlWarp;
+  warpedUV.y -= t * advect;
 
   vec2 r = vec2(
-    fbm3(fUV * 2.8 + q * 1.4 + vec2(t * 0.18, t * 0.22) + 1.7),
-    fbm3(fUV * 2.8 + q * 1.4 + vec2(t * 0.22, t * 0.12) + 9.2)
+    fbm3(warpedUV + vec2(t * 0.12, -t * 0.08) + 1.7),
+    fbm3(warpedUV + vec2(-t * 0.1,  t * 0.14) + 9.2)
   );
 
-  // ── Main fire noise ──
-  vec2 fireCoord = fUV * 2.5 + r * 0.55;
-  fireCoord.y -= t * 1.8;  // upward scroll
-  float noise = fbm5(fireCoord);
 
-  // ── Combine shape + noise ──
-  float fire = shape * (0.52 + noise * 0.48) * intClamped * breath;
+  // ═══════════════════════════════════════
+  //  FIRE DENSITY
+  // ═══════════════════════════════════════
+
+  vec2 fireCoord = fUV * 4.0 + r * 0.4;
+  fireCoord.y -= t * advect;
+  float density = fbm4(fireCoord);
+
+  // High-frequency detail layer for crispness
+  float detail = snoise(fUV * 9.0 + r * 0.2
+                        - vec2(0.0, t * advect * 1.3));
+  density = density * 0.78 + detail * 0.22;
+
+  // Spatially-varying breathing (base steady, tips breathe)
+  float breath = 1.0 + u_breath * 0.04 * (1.0 - h01 * 0.5);
+
+  // Combine
+  float fire = shape * (0.42 + density * 0.58) * intCl * breath;
   fire = clamp(fire, 0.0, 1.0);
 
-  // ── Flame tip flicker ──
-  float tipFlicker = snoise(vec2(fUV.x * 5.0, t * 3.5)) * 0.12 * h01;
-  fire += tipFlicker * shape * intClamped * 0.5;
+
+  // ═══════════════════════════════════════
+  //  TONGUE TIP FLICKER
+  // ═══════════════════════════════════════
+
+  float flicker = snoise(vec2(fUV.x * 4.5, t * 4.2)) * 0.11
+                + snoise(vec2(fUV.x * 9.0, t * 6.5)) * 0.05;
+  fire += flicker * tongueStr * shape * intCl * 0.7;
   fire = clamp(fire, 0.0, 1.0);
 
-  // ── Campfire color gradient ──
-  // Dark ember → deep crimson → vivid orange → amber → gold → warm white
+
+  // ═══════════════════════════════════════
+  //  COLOR: temperature = f(density, height)
+  // ═══════════════════════════════════════
+
+  // Temperature: hot at base (high density, low height), cool at tips
+  float temperature = fire * (1.0 - h01 * 0.55);
+
   vec3 c;
-  c  = mix(vec3(0.10, 0.015, 0.0),  vec3(0.45, 0.06, 0.0),  smoothstep(0.00, 0.18, fire));
-  c  = mix(c, vec3(0.90, 0.25, 0.02), smoothstep(0.12, 0.38, fire));
-  c  = mix(c, vec3(1.00, 0.55, 0.06), smoothstep(0.30, 0.55, fire));
-  c  = mix(c, vec3(1.00, 0.78, 0.18), smoothstep(0.45, 0.70, fire));
-  c  = mix(c, vec3(1.00, 0.92, 0.45), smoothstep(0.60, 0.85, fire));
-  c  = mix(c, vec3(1.00, 0.97, 0.78), smoothstep(0.80, 1.00, fire));
+  // Ember black → deep crimson
+  c  = mix(vec3(0.05, 0.003, 0.0),   vec3(0.28, 0.025, 0.0),
+           smoothstep(0.00, 0.10, temperature));
+  // → rich red
+  c  = mix(c, vec3(0.60, 0.08, 0.005),
+           smoothstep(0.06, 0.22, temperature));
+  // → vivid orange
+  c  = mix(c, vec3(1.00, 0.35, 0.015),
+           smoothstep(0.18, 0.38, temperature));
+  // → warm orange-yellow
+  c  = mix(c, vec3(1.00, 0.58, 0.05),
+           smoothstep(0.32, 0.52, temperature));
+  // → bright gold
+  c  = mix(c, vec3(1.00, 0.80, 0.18),
+           smoothstep(0.46, 0.68, temperature));
+  // → near-white hot
+  c  = mix(c, vec3(1.00, 0.93, 0.50),
+           smoothstep(0.65, 0.88, temperature));
 
-  // ── Blue base zone (complete combustion — realistic campfire detail) ──
-  float blueZone = smoothstep(0.12, -0.02, fUV.y)
-                 * (1.0 - smoothstep(0.0, 0.55, abs(fUV.x)))
-                 * intClamped;
-  c = mix(c, vec3(0.25, 0.45, 1.0), blueZone * 0.35);
+  // Height-based tint: flame tips skew redder regardless of density
+  c *= mix(vec3(1.0), vec3(1.0, 0.50, 0.18), h01 * h01 * 0.45);
 
-  // ── Apply tint ──
+  // Blue combustion zone: paper-thin, right above the embers
+  float blueZone = smoothstep(0.04, -0.01, fUV.y)
+                 * smoothstep(0.30, 0.0, abs(fUV.x))
+                 * intCl * fire;
+  c = mix(c, vec3(0.10, 0.25, 0.75), blueZone * 0.15);
+
+  // Apply game tint
   c *= u_tint;
 
-  // ── Alpha ──
-  float alpha = smoothstep(0.015, 0.14, fire);
 
-  // ── Soft outer glow (ambient warmth around fire) ──
-  float glow = shape * intClamped * 0.12 * breath;
-  vec3 glowCol = vec3(0.7, 0.25, 0.04) * u_tint;
-  float glowAlpha = glow * 0.5 * (1.0 - alpha);
-  c += glowCol * glowAlpha;
-  alpha = max(alpha, glowAlpha * 0.7);
+  // ═══════════════════════════════════════
+  //  ALPHA
+  // ═══════════════════════════════════════
 
-  // ── Premultiplied alpha output ──
+  float alpha = smoothstep(0.015, 0.09, fire);
+  // Progressive tip fade — no hard cutoff
+  alpha *= mix(1.0, 0.35, smoothstep(0.80, 1.15, h01));
+
+  // Minimal ambient glow (barely perceptible warmth)
+  float glow  = shape * intCl * 0.02 * (1.0 - h01);
+  float glowA = glow * (1.0 - alpha) * 0.2;
+  c    += vec3(0.30, 0.08, 0.01) * u_tint * glowA;
+  alpha = max(alpha, glowA * 0.2);
+
   gl_FragColor = vec4(c * alpha, alpha);
 }
 `;
@@ -218,7 +309,6 @@ export class FireEngine {
   }
 
   _initWebGL(gl) {
-    // ── Compile shaders ──
     const vs = this._compileShader(gl, gl.VERTEX_SHADER, VERT_SRC);
     const fs = this._compileShader(gl, gl.FRAGMENT_SHADER, FRAG_SRC);
     const prog = gl.createProgram();
@@ -234,27 +324,22 @@ export class FireEngine {
 
     this._prog = prog;
 
-    // ── Attributes ──
-    this._aPos = gl.getAttribLocation(prog, 'a_pos');
-
-    // ── Uniforms ──
+    this._aPos        = gl.getAttribLocation(prog, 'a_pos');
     this._uTime       = gl.getUniformLocation(prog, 'u_time');
-    this._uIntensity   = gl.getUniformLocation(prog, 'u_intensity');
-    this._uWind        = gl.getUniformLocation(prog, 'u_wind');
-    this._uTint        = gl.getUniformLocation(prog, 'u_tint');
-    this._uResolution  = gl.getUniformLocation(prog, 'u_resolution');
-    this._uBreath      = gl.getUniformLocation(prog, 'u_breath');
+    this._uIntensity  = gl.getUniformLocation(prog, 'u_intensity');
+    this._uWind       = gl.getUniformLocation(prog, 'u_wind');
+    this._uTint       = gl.getUniformLocation(prog, 'u_tint');
+    this._uResolution = gl.getUniformLocation(prog, 'u_resolution');
+    this._uBreath     = gl.getUniformLocation(prog, 'u_breath');
 
-    // ── Fullscreen quad buffer ──
     const verts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
     const buf = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, buf);
     gl.bufferData(gl.ARRAY_BUFFER, verts, gl.STATIC_DRAW);
     this._vbo = buf;
 
-    // ── GL state ──
     gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied alpha
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
     gl.clearColor(0, 0, 0, 0);
   }
 
@@ -268,10 +353,9 @@ export class FireEngine {
     return s;
   }
 
-  // ── Canvas resize ──
   resize() {
-    // Render at 0.65x resolution for perf (fire is soft, doesn't need full res)
-    const scale = 0.65;
+    // Full-quality rendering — fire detail needs resolution
+    const scale = 0.9;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = Math.round(this.canvas.clientWidth  * dpr * scale);
     const h = Math.round(this.canvas.clientHeight * dpr * scale);
@@ -281,7 +365,7 @@ export class FireEngine {
     }
   }
 
-  // ── Public API (same interface) ──
+  // ── Public API (identical interface) ──
 
   boost(amount, duration = 1.5) {
     this.boostIntensity = Math.min(this.boostIntensity + amount, 0.55);
@@ -308,14 +392,14 @@ export class FireEngine {
 
     this.resize();
 
-    // ── Update boost ──
+    // Update boost
     if (this.boostTimer > 0) {
       this.boostTimer -= dt;
     } else {
       this.boostIntensity *= Math.pow(0.12, dt);
     }
 
-    // ── Smooth lerp toward targets ──
+    // Smooth lerp toward targets
     const ls  = Math.min(2.5 * dt, 1);
     const tgt = this.targetIntensity + this.boostIntensity;
     this.intensity += (tgt - this.intensity) * ls;
@@ -324,10 +408,10 @@ export class FireEngine {
       this.tint[i] += (this.targetTint[i] - this.tint[i]) * ls;
     }
 
-    // ── Update breathing phase ──
+    // Breathing phase
     this._breathPhase += dt * this._breathSpeed * Math.PI * 2;
 
-    // ── Multi-frequency natural wind turbulence ──
+    // Natural wind turbulence (multi-frequency)
     const now = performance.now();
     const w1 = Math.sin(now / 1800) * 0.08;
     const w2 = Math.sin(now / 750)  * 0.05;
@@ -344,10 +428,10 @@ export class FireEngine {
     this._gustStrength *= Math.pow(0.06, dt);
     this.wind += (natWind + this._gustStrength - this.wind) * 0.03;
 
-    // ── Accumulate time ──
+    // Accumulate time
     this._time += dt;
 
-    // ── Breathing value ──
+    // Breathing value (multi-harmonic)
     const breathVal = Math.sin(this._breathPhase)
                     + Math.sin(this._breathPhase * 2.3 + 0.5) * 0.5;
 
@@ -359,12 +443,10 @@ export class FireEngine {
     gl.viewport(0, 0, w, h);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    // Skip rendering if fire is completely out
     if (this.intensity < 0.005) return;
 
     gl.useProgram(this._prog);
 
-    // Uniforms
     gl.uniform1f(this._uTime,      this._time);
     gl.uniform1f(this._uIntensity,  this.intensity);
     gl.uniform1f(this._uWind,       this.wind);
@@ -372,7 +454,6 @@ export class FireEngine {
     gl.uniform2f(this._uResolution, w, h);
     gl.uniform1f(this._uBreath,     breathVal);
 
-    // Draw fullscreen quad
     gl.bindBuffer(gl.ARRAY_BUFFER, this._vbo);
     gl.enableVertexAttribArray(this._aPos);
     gl.vertexAttribPointer(this._aPos, 2, gl.FLOAT, false, 0, 0);
