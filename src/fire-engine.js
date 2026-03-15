@@ -96,8 +96,8 @@ void main() {
   // Contained proportions — campfire, not inferno
   // fireBaseY: WebGL UV space (y=0 at bottom, y=1 at top)
   float fireBaseY = 0.28;
-  float fireHeight = 0.20 + intCl * 0.07;
-  float fireWidth  = 0.12 + intCl * 0.025;
+  float fireHeight = 0.28 + intCl * 0.10;
+  float fireWidth  = 0.065 + intCl * 0.010;
 
   // fUV: x=0 centered, y=0 at base, y=1 at tip (fire goes UP)
   vec2 fUV = vec2(
@@ -124,27 +124,24 @@ void main() {
   //  SHAPE: proper campfire taper + tongues
   // ═══════════════════════════════════════
 
-  // Base shape: slightly pinched at embers, wide just above, tapering to tip
-  float basePinch = smoothstep(0.0, 0.08, h01);
-  float taper     = pow(1.0 - h01, 1.1);
+  // Base shape: pinched at embers, sharply tapering to tongue tips
+  float basePinch = smoothstep(0.0, 0.15, h01);
+  float taper     = pow(max(0.0, 1.0 - h01), 2.5);
   float rawWidth  = basePinch * taper;
 
-  // Tongue edge noise — creates flame tongue protrusions
-  // Major tongues: 2-3 wide, slow-rolling protrusions
+  // Tongue edge noise — distinct flame tongues
   float tng1 = snoise(vec2(fUV.x * 2.5 + 0.5, fUV.y * 2.0 - t * 1.2));
-  // Secondary tongues: narrower, faster
   float tng2 = snoise(vec2(fUV.x * 5.5 - 1.2, fUV.y * 3.5 - t * 2.0));
-  // Fine turbulence: tip shimmer
   float tng3 = snoise(vec2(fUV.x * 10.0 + 2.0, fUV.y * 5.0 - t * 3.2));
 
-  // Tongue intensity grows with height: base is smooth, tips are wild
-  float tongueStr = h01 * h01;
-  float tongueOffset = (tng1 * 0.28 + tng2 * 0.13 + tng3 * 0.06) * tongueStr;
+  // Tongues active throughout — strongest at tips
+  float tongueStr = smoothstep(0.05, 0.55, h01);
+  float tongueOffset = (tng1 * 0.40 + tng2 * 0.20 + tng3 * 0.10) * tongueStr;
 
-  float modWidth = max(rawWidth + tongueOffset * 0.35, 0.0);
+  float modWidth = max(rawWidth + tongueOffset * 0.90, 0.0);
 
   // Edge sharpness: soft glow at base, crisp defined tongues at tips
-  float edgeSoft = mix(0.22, 0.025, h01);
+  float edgeSoft = mix(0.30, 0.02, h01);
   float xMask = smoothstep(modWidth, modWidth - edgeSoft, abs(fUV.x));
 
   // Y fade: gentle entry, long natural fadeout
