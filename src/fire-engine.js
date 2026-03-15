@@ -21,7 +21,8 @@ void main() {
   gl_Position = vec4(a_pos, 0.0, 1.0);
 }`;
 
-// ── Fragment shader ──
+// ── Fragment shader — MlKSWm (ronvalstar) port ──
+// 3D Simplex noise + noiseStack domain displacement + spark system
 const FRAG_SRC = `
 precision highp float;
 
@@ -33,236 +34,168 @@ uniform vec3  u_tint;
 uniform vec2  u_resolution;
 uniform float u_breath;
 
-// ── Simplex 2D noise (Ashima Arts) ──
-vec3 mod289(vec3 x) { return x - floor(x * (1.0/289.0)) * 289.0; }
-vec2 mod289v2(vec2 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
-vec3 permute(vec3 x) { return mod289(((x*34.0)+1.0)*x); }
-
-float snoise(vec2 v) {
-  const vec4 C = vec4(0.211324865405187, 0.366025403784439,
-                     -0.577350269189626, 0.024390243902439);
-  vec2 i  = floor(v + dot(v, C.yy));
-  vec2 x0 = v - i + dot(i, C.xx);
-  vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
-  vec4 x12 = x0.xyxy + C.xxzz;
-  x12.xy -= i1;
-  i = mod289v2(i);
-  vec3 p = permute(permute(i.y + vec3(0.0, i1.y, 1.0))
-                           + i.x + vec3(0.0, i1.x, 1.0));
-  vec3 m = max(0.5 - vec3(dot(x0,x0), dot(x12.xy,x12.xy),
-                           dot(x12.zw,x12.zw)), 0.0);
-  m = m*m; m = m*m;
-  vec3 x = 2.0 * fract(p * C.www) - 1.0;
-  vec3 h = abs(x) - 0.5;
-  vec3 ox = floor(x + 0.5);
-  vec3 a0 = x - ox;
-  m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
-  vec3 g;
-  g.x  = a0.x * x0.x  + h.x * x0.y;
-  g.yz = a0.yz* x12.xz + h.yz* x12.yw;
-  return 130.0 * dot(m, g);
+// ─── 3D Simplex noise — Ian McEwan / Ashima Arts ─────────────────────────
+vec3 _m289(vec3 x){return x-floor(x*(1./289.))*289.;}
+vec4 _m289v(vec4 x){return x-floor(x*(1./289.))*289.;}
+vec4 _perm(vec4 x){return _m289v(((x*34.)+1.)*x);}
+vec4 _tiSqrt(vec4 r){return 1.79284291-.85373472*r;}
+float snoise(vec3 v){
+  const vec2 C=vec2(1./6.,1./3.);
+  const vec4 D=vec4(0.,.5,1.,2.);
+  vec3 i=floor(v+dot(v,C.yyy));
+  vec3 x0=v-i+dot(i,C.xxx);
+  vec3 g=step(x0.yzx,x0.xyz);
+  vec3 l=1.-g;
+  vec3 i1=min(g.xyz,l.zxy);
+  vec3 i2=max(g.xyz,l.zxy);
+  vec3 x1=x0-i1+C.xxx; vec3 x2=x0-i2+C.yyy; vec3 x3=x0-D.yyy;
+  i=_m289(i);
+  vec4 p=_perm(_perm(_perm(i.z+vec4(0.,i1.z,i2.z,1.))
+    +i.y+vec4(0.,i1.y,i2.y,1.))+i.x+vec4(0.,i1.x,i2.x,1.));
+  float n_=.142857142857;
+  vec3 ns=n_*D.wyz-D.xzx;
+  vec4 j=p-49.*floor(p*ns.z*ns.z);
+  vec4 x_=floor(j*ns.z); vec4 y_=floor(j-7.*x_);
+  vec4 xx=x_*ns.x+ns.yyyy; vec4 yy=y_*ns.x+ns.yyyy;
+  vec4 h=1.-abs(xx)-abs(yy);
+  vec4 b0=vec4(xx.xy,yy.xy); vec4 b1=vec4(xx.zw,yy.zw);
+  vec4 s0=floor(b0)*2.+1.; vec4 s1=floor(b1)*2.+1.;
+  vec4 sh=-step(h,vec4(0.));
+  vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;
+  vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;
+  vec3 p0=vec3(a0.xy,h.x); vec3 p1=vec3(a0.zw,h.y);
+  vec3 p2=vec3(a1.xy,h.z); vec3 p3=vec3(a1.zw,h.w);
+  vec4 norm=_tiSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));
+  p0*=norm.x; p1*=norm.y; p2*=norm.z; p3*=norm.w;
+  vec4 m=max(.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.);
+  m=m*m;
+  return 42.*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));
 }
 
-// Rotation matrix between FBM octaves — breaks axis-aligned banding
-const mat2 FBM_ROT = mat2(0.8, 0.6, -0.6, 0.8);
-
-float fbm4(vec2 p) {
-  float v = 0.0, a = 0.5;
-  for (int i = 0; i < 4; i++) {
-    v += a * snoise(p);
-    a *= 0.5;
-    p = FBM_ROT * p * 2.0;
-  }
-  return v;
+// ─── noiseStack & noiseStackUV — MlKSWm (ronvalstar) ─────────────────────
+float noiseStack(vec3 pos,int oct,float fall){
+  float n=snoise(pos),off=1.;
+  if(oct>1){pos*=2.;off*=fall;n=(1.-off)*n+off*snoise(pos);}
+  if(oct>2){pos*=2.;off*=fall;n=(1.-off)*n+off*snoise(pos);}
+  if(oct>3){pos*=2.;off*=fall;n=(1.-off)*n+off*snoise(pos);}
+  return (1.+n)/2.;
+}
+vec2 noiseStackUV(vec3 pos,int oct,float fall){
+  return vec2(noiseStack(pos,oct,fall),
+              noiseStack(pos+vec3(3984.293,423.21,5235.19),oct,fall));
 }
 
-float fbm3(vec2 p) {
-  float v = 0.0, a = 0.5;
-  for (int i = 0; i < 3; i++) {
-    v += a * snoise(p);
-    a *= 0.5;
-    p = FBM_ROT * p * 2.0;
-  }
-  return v;
+// ─── PRNG — Dave_Hoskins ─────────────────────────────────────────────────
+float prng(vec2 s){
+  s=fract(s*vec2(5.3983,5.4427));
+  s+=dot(s.yx,s.xy+vec2(21.5351,14.3137));
+  return fract(s.x*s.y*95.4337);
 }
 
-void main() {
-  vec2 uv = v_uv;
-  float aspect = u_resolution.x / u_resolution.y;
-  float t = u_time;
-  float intCl = clamp(u_intensity, 0.0, 1.5);
+const float PI=3.14159265;
 
-  // ── Fire coordinate system ──
-  // Contained proportions — campfire, not inferno
-  // fireBaseY: WebGL UV space (y=0 at bottom, y=1 at top)
-  float fireBaseY = 0.28;
-  float fireHeight = 0.40 + intCl * 0.14;
-  float fireWidth  = 0.048 + intCl * 0.007;
+void main(){
+  vec2 fc=v_uv*u_resolution;
+  vec2 res=u_resolution;
 
-  // fUV: x=0 centered, y=0 at base, y=1 at tip (fire goes UP)
-  vec2 fUV = vec2(
-    (uv.x - 0.5) * aspect / fireWidth,
-    (uv.y - fireBaseY) / fireHeight
-  );
+  float intCl=clamp(u_intensity,0.,1.5);
 
-  // Early exit — skip pixels far from fire
-  if (fUV.y < -0.15 || fUV.y > 1.4 || abs(fUV.x) > 2.5) {
-    gl_FragColor = vec4(0.0);
-    return;
+  // Map intensity to fire geometry
+  float uScale  = 0.50 + intCl * 0.45;
+  float uHeight = 0.65 + intCl * 0.30 + u_breath * 0.018;
+
+  // Fire base at ~28% from bottom — matches fire-clicker log position
+  float fireBase = res.y * 0.28;
+  float clip     = res.y * 0.55 * uScale * uHeight;
+  float fireHW   = res.x * 0.33 * uScale;
+
+  float xpart     = (fc.x-(res.x*.5-fireHW))/(2.*fireHW);
+  float ypartClip = (fc.y-fireBase)/clip;
+  float ypart     = fc.y/res.y;
+
+  // Skip non-fire pixels → transparent
+  if(xpart<0.||xpart>1.||ypartClip<-0.1){
+    gl_FragColor=vec4(0.); return;
   }
 
-  float h01 = clamp(fUV.y, 0.0, 1.0);
+  float ypartClippedFalloff = clamp(2.-ypartClip,0.,1.);
+  float ypartClipped        = min(ypartClip,1.);
+  float ypartClippedn       = 1.-ypartClipped;
 
-  // ── Wind: height-dependent lean ──
-  fUV.x += u_wind * h01 * h01 * 0.4;
+  // Wind lean (shifts fire sampling toward wind direction with height)
+  float windLean = u_wind * clamp(ypartClip,0.,1.) * 0.22;
+  float xpartW   = clamp(xpart-windLean,0.,1.);
 
-  // ── Convection: flames accelerate upward ──
-  float advect = 1.0 + h01 * 2.5;
+  // Fuel: smooth bell + slow horizontal turbulence (breaks pyramid shape)
+  float xe       = clamp(abs(xpartW-0.5)*2.1,0.,1.);
+  float xfuelB   = 1.-xe*xe*xe;
+  float xfuelT   = snoise(vec3(xpart*2.4,u_time*0.06,89.31))*0.42;
+  float xfuel    = clamp(xfuelB+xfuelT,0.,1.);
 
+  float realTime = 0.5*u_time;
 
-  // ═══════════════════════════════════════
-  //  SHAPE: proper campfire taper + tongues
-  // ═══════════════════════════════════════
+  vec2 fireCoord  = vec2(fc.x-(res.x*.5-fireHW), fc.y-fireBase);
+  vec2 coordSc    = 0.01*fireCoord;
+  vec3 pos        = vec3(coordSc,0.)+vec3(1223.,6434.,8425.);
 
-  // Base shape: very narrow core — tongues create the visible structure
-  float basePinch = smoothstep(0.0, 0.18, h01);
-  float taper     = pow(max(0.0, 1.0 - h01), 4.5) * 0.22;
-  float rawWidth  = basePinch * taper;
+  vec3 flow=vec3(
+    4.1*(0.5-xpartW)*pow(ypartClippedn,4.) + u_wind*0.12,
+    -2.*xfuel*pow(ypartClippedn,64.),
+    0.);
+  vec3 timing=realTime*vec3(0.,-1.7,1.1)+flow;
 
-  // Tongue noise — frequencies tuned for 2-3 distinct tongues
-  float tng1 = snoise(vec2(fUV.x * 5.0 + 0.5, fUV.y * 2.0 - t * 1.2));
-  float tng2 = snoise(vec2(fUV.x * 9.5 - 1.2, fUV.y * 3.5 - t * 2.0));
-  float tng3 = snoise(vec2(fUV.x * 17.0 + 2.0, fUV.y * 5.0 - t * 3.2));
+  vec3 dPos  = vec3(1.,.5,1.)*2.4*pos+realTime*vec3(.01,-.7,1.3);
+  vec3 disp  = vec3(noiseStackUV(dPos,2,.4),0.);
+  vec3 nCoord= vec3(2.,1.,1.)*pos+timing+.4*disp;
+  float noise= noiseStack(nCoord,3,.4);
 
-  // Tongues dominate from lower flame up
-  float tongueStr = smoothstep(0.02, 0.30, h01);
-  float tongueOffset = (tng1 * 0.52 + tng2 * 0.28 + tng3 * 0.10) * tongueStr;
+  // MlKSWm flame formula
+  float flames = pow(ypartClipped,0.3*xfuel)*pow(noise,0.3*xfuel);
+  float f      = ypartClippedFalloff*pow(1.-flames*flames*flames,8.);
+  float fff    = f*f*f;
 
-  // Strong multiplier: tongues create gaps AND peaks
-  float modWidth = max(rawWidth + tongueOffset * 1.40, 0.0);
+  // Blackbody fire colors
+  vec3 fire = 1.5*vec3(f,fff,fff*fff);
 
-  // Crisp edges — hard tongue tips, soft base glow
-  float edgeSoft = mix(0.18, 0.010, h01);
-  float xMask = smoothstep(modWidth, modWidth - edgeSoft, abs(fUV.x));
+  // Coal-bed glow at base (orange warmth from logs)
+  float coalY  = exp(-ypartClip*ypartClip*30.);
+  fire += vec3(1.,.16,0.)*coalY*xfuel*1.4;
 
-  // Y fade: gentle entry, extended upper reach for tall tongues
-  float yFade = smoothstep(-0.02, 0.06, fUV.y)
-              * (1.0 - smoothstep(0.62, 1.25, fUV.y));
+  // Smoke
+  float sNoise = .5+snoise(.4*pos+timing*vec3(1.,1.,.2))/2.;
+  vec3 smoke   = vec3(.22*pow(xfuel,3.)*pow(ypart,2.)*(sNoise+.4*(1.-noise)));
 
-  float shape = xMask * yFade;
+  // Spark system (MlKSWm grid-orbital)
+  float sgS  = 30.;
+  float sRise= (clip/res.y)*190./(res.y*.35)*clip;
+  vec2 sCoord= fireCoord - vec2(u_wind*clip*.4, sRise*realTime);
+  sCoord -= 30.*noiseStackUV(.01*vec3(sCoord,30.*u_time),1,.4);
+  sCoord += 100.*flow.xy;
+  if(mod(sCoord.y/sgS,2.)<1.) sCoord.x+=.5*sgS;
+  vec2 sGI  = floor(sCoord/sgS);
+  float sRnd= prng(sGI);
+  float sLife=min(10.*(1.-min((sGI.y+(sRise*realTime/sgS))/(24.-20.*sRnd),1.)),1.);
+  vec3 sparks=vec3(0.);
+  if(sLife>0.){
+    float sSz  = xfuel*xfuel*sRnd*.08;
+    float sRad = 999.*sRnd*2.*PI+2.*u_time;
+    vec2 sCirc = vec2(sin(sRad),cos(sRad));
+    vec2 sOff  = (.5-sSz)*sgS*sCirc;
+    vec2 sMod  = mod(sCoord+sOff,sgS)-.5*vec2(sgS);
+    float sLen = length(sMod);
+    float sGray= max(0.,1.-sLen/(sSz*sgS));
+    sparks = sLife*sGray*vec3(1.,.3,0.);
+  }
 
+  // Apply game tint + compose fire/sparks/smoke
+  vec3 col = (max(fire,sparks)+smoke*.5)*u_tint;
 
-  // ═══════════════════════════════════════
-  //  DOMAIN WARPING (curl-noise inspired)
-  // ═══════════════════════════════════════
+  // Fade alpha with intensity (fire disappears when dying)
+  float alpha = clamp(dot(max(fire,sparks),vec3(.3,.59,.11))*2.5,0.,1.);
+  alpha *= smoothstep(0.02,0.12,intCl);
 
-  vec2 warpSeed = fUV * 2.5;
-  warpSeed.y -= t * advect * 0.3;
-
-  vec2 q = vec2(
-    fbm3(warpSeed + vec2(t * 0.32, 0.0)),
-    fbm3(warpSeed + vec2(0.0, t * 0.38) + 5.2)
-  );
-
-  // Curl direction: perpendicular to warp gradient → swirl, not stretch
-  vec2 curlWarp = vec2(q.y, -q.x) * 0.5;
-
-  vec2 warpedUV = fUV * 3.5 + curlWarp;
-  warpedUV.y -= t * advect;
-
-  vec2 r = vec2(
-    fbm3(warpedUV + vec2(t * 0.12, -t * 0.08) + 1.7),
-    fbm3(warpedUV + vec2(-t * 0.1,  t * 0.14) + 9.2)
-  );
-
-
-  // ═══════════════════════════════════════
-  //  FIRE DENSITY
-  // ═══════════════════════════════════════
-
-  vec2 fireCoord = fUV * 4.0 + r * 0.4;
-  fireCoord.y -= t * advect;
-  float density = fbm4(fireCoord);
-
-  // High-frequency detail layer for crispness
-  float detail = snoise(fUV * 9.0 + r * 0.2
-                        - vec2(0.0, t * advect * 1.3));
-  density = density * 0.78 + detail * 0.22;
-
-  // Spatially-varying breathing (base steady, tips breathe)
-  float breath = 1.0 + u_breath * 0.04 * (1.0 - h01 * 0.5);
-
-  // Combine
-  float fire = shape * (0.42 + density * 0.58) * intCl * breath;
-  fire = clamp(fire, 0.0, 1.0);
-
-
-  // ═══════════════════════════════════════
-  //  TONGUE TIP FLICKER
-  // ═══════════════════════════════════════
-
-  float flicker = snoise(vec2(fUV.x * 4.5, t * 4.2)) * 0.11
-                + snoise(vec2(fUV.x * 9.0, t * 6.5)) * 0.05;
-  fire += flicker * tongueStr * shape * intCl * 0.7;
-  fire = clamp(fire, 0.0, 1.0);
-
-
-  // ═══════════════════════════════════════
-  //  COLOR: temperature = f(density, height)
-  // ═══════════════════════════════════════
-
-  // Temperature: hot at base (high density, low height), cool at tips
-  float temperature = fire * (1.0 - h01 * 0.55);
-
-  vec3 c;
-  // Ember black → deep crimson
-  c  = mix(vec3(0.05, 0.003, 0.0),   vec3(0.28, 0.025, 0.0),
-           smoothstep(0.00, 0.10, temperature));
-  // → rich red
-  c  = mix(c, vec3(0.60, 0.08, 0.005),
-           smoothstep(0.06, 0.22, temperature));
-  // → vivid orange
-  c  = mix(c, vec3(1.00, 0.35, 0.015),
-           smoothstep(0.18, 0.38, temperature));
-  // → warm orange-yellow
-  c  = mix(c, vec3(1.00, 0.58, 0.05),
-           smoothstep(0.32, 0.52, temperature));
-  // → bright gold
-  c  = mix(c, vec3(1.00, 0.80, 0.18),
-           smoothstep(0.46, 0.68, temperature));
-  // → near-white hot
-  c  = mix(c, vec3(1.00, 0.93, 0.50),
-           smoothstep(0.65, 0.88, temperature));
-
-  // Blue-purple at tongue tips — characteristic of real campfire flame
-  float tipBlue = smoothstep(0.42, 0.88, h01) * smoothstep(0.02, 0.12, fire);
-  c = mix(c, vec3(0.22, 0.10, 0.92), tipBlue * 0.70);
-
-  // Blue combustion zone: paper-thin, right above the embers
-  float blueZone = smoothstep(0.04, -0.01, fUV.y)
-                 * smoothstep(0.30, 0.0, abs(fUV.x))
-                 * intCl * fire;
-  c = mix(c, vec3(0.10, 0.25, 0.75), blueZone * 0.15);
-
-  // Apply game tint
-  c *= u_tint;
-
-
-  // ═══════════════════════════════════════
-  //  ALPHA
-  // ═══════════════════════════════════════
-
-  float alpha = smoothstep(0.010, 0.08, fire);
-  // Tongue tips remain visible for blue glow
-  alpha *= mix(1.0, 0.15, smoothstep(0.72, 1.18, h01));
-
-  // Minimal ambient glow (barely perceptible warmth)
-  float glow  = shape * intCl * 0.02 * (1.0 - h01);
-  float glowA = glow * (1.0 - alpha) * 0.2;
-  c    += vec3(0.30, 0.08, 0.01) * u_tint * glowA;
-  alpha = max(alpha, glowA * 0.2);
-
-  gl_FragColor = vec4(c * alpha, alpha);
+  // Pre-multiplied alpha (blendFunc ONE / ONE_MINUS_SRC_ALPHA)
+  gl_FragColor = vec4(col*alpha, alpha);
 }
 `;
 
