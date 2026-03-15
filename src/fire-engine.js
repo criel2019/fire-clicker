@@ -96,8 +96,8 @@ void main() {
   // Contained proportions — campfire, not inferno
   // fireBaseY: WebGL UV space (y=0 at bottom, y=1 at top)
   float fireBaseY = 0.28;
-  float fireHeight = 0.28 + intCl * 0.10;
-  float fireWidth  = 0.065 + intCl * 0.010;
+  float fireHeight = 0.40 + intCl * 0.14;
+  float fireWidth  = 0.048 + intCl * 0.007;
 
   // fUV: x=0 centered, y=0 at base, y=1 at tip (fire goes UP)
   vec2 fUV = vec2(
@@ -124,29 +124,30 @@ void main() {
   //  SHAPE: proper campfire taper + tongues
   // ═══════════════════════════════════════
 
-  // Base shape: pinched at embers, sharply tapering to tongue tips
-  float basePinch = smoothstep(0.0, 0.15, h01);
-  float taper     = pow(max(0.0, 1.0 - h01), 2.5);
+  // Base shape: very narrow core — tongues create the visible structure
+  float basePinch = smoothstep(0.0, 0.18, h01);
+  float taper     = pow(max(0.0, 1.0 - h01), 4.5) * 0.22;
   float rawWidth  = basePinch * taper;
 
-  // Tongue edge noise — distinct flame tongues
-  float tng1 = snoise(vec2(fUV.x * 2.5 + 0.5, fUV.y * 2.0 - t * 1.2));
-  float tng2 = snoise(vec2(fUV.x * 5.5 - 1.2, fUV.y * 3.5 - t * 2.0));
-  float tng3 = snoise(vec2(fUV.x * 10.0 + 2.0, fUV.y * 5.0 - t * 3.2));
+  // Tongue noise — frequencies tuned for 2-3 distinct tongues
+  float tng1 = snoise(vec2(fUV.x * 5.0 + 0.5, fUV.y * 2.0 - t * 1.2));
+  float tng2 = snoise(vec2(fUV.x * 9.5 - 1.2, fUV.y * 3.5 - t * 2.0));
+  float tng3 = snoise(vec2(fUV.x * 17.0 + 2.0, fUV.y * 5.0 - t * 3.2));
 
-  // Tongues active throughout — strongest at tips
-  float tongueStr = smoothstep(0.05, 0.55, h01);
-  float tongueOffset = (tng1 * 0.40 + tng2 * 0.20 + tng3 * 0.10) * tongueStr;
+  // Tongues dominate from lower flame up
+  float tongueStr = smoothstep(0.02, 0.30, h01);
+  float tongueOffset = (tng1 * 0.52 + tng2 * 0.28 + tng3 * 0.10) * tongueStr;
 
-  float modWidth = max(rawWidth + tongueOffset * 0.90, 0.0);
+  // Strong multiplier: tongues create gaps AND peaks
+  float modWidth = max(rawWidth + tongueOffset * 1.40, 0.0);
 
-  // Edge sharpness: soft glow at base, crisp defined tongues at tips
-  float edgeSoft = mix(0.30, 0.02, h01);
+  // Crisp edges — hard tongue tips, soft base glow
+  float edgeSoft = mix(0.18, 0.010, h01);
   float xMask = smoothstep(modWidth, modWidth - edgeSoft, abs(fUV.x));
 
-  // Y fade: gentle entry, long natural fadeout
+  // Y fade: gentle entry, extended upper reach for tall tongues
   float yFade = smoothstep(-0.02, 0.06, fUV.y)
-              * (1.0 - smoothstep(0.60, 1.12, fUV.y));
+              * (1.0 - smoothstep(0.62, 1.25, fUV.y));
 
   float shape = xMask * yFade;
 
@@ -233,8 +234,9 @@ void main() {
   c  = mix(c, vec3(1.00, 0.93, 0.50),
            smoothstep(0.65, 0.88, temperature));
 
-  // Height-based tint: flame tips skew redder regardless of density
-  c *= mix(vec3(1.0), vec3(1.0, 0.50, 0.18), h01 * h01 * 0.45);
+  // Blue-purple at tongue tips — characteristic of real campfire flame
+  float tipBlue = smoothstep(0.42, 0.88, h01) * smoothstep(0.02, 0.12, fire);
+  c = mix(c, vec3(0.22, 0.10, 0.92), tipBlue * 0.70);
 
   // Blue combustion zone: paper-thin, right above the embers
   float blueZone = smoothstep(0.04, -0.01, fUV.y)
@@ -250,9 +252,9 @@ void main() {
   //  ALPHA
   // ═══════════════════════════════════════
 
-  float alpha = smoothstep(0.015, 0.09, fire);
-  // Progressive tip fade — no hard cutoff
-  alpha *= mix(1.0, 0.35, smoothstep(0.80, 1.15, h01));
+  float alpha = smoothstep(0.010, 0.08, fire);
+  // Tongue tips remain visible for blue glow
+  alpha *= mix(1.0, 0.15, smoothstep(0.72, 1.18, h01));
 
   // Minimal ambient glow (barely perceptible warmth)
   float glow  = shape * intCl * 0.02 * (1.0 - h01);
