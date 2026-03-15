@@ -94,14 +94,15 @@ void main() {
 
   // ── Fire coordinate system ──
   // Contained proportions — campfire, not inferno
-  float fireBaseY = 0.72;
+  // fireBaseY: WebGL UV space (y=0 at bottom, y=1 at top)
+  float fireBaseY = 0.28;
   float fireHeight = 0.20 + intCl * 0.07;
   float fireWidth  = 0.12 + intCl * 0.025;
 
-  // fUV: x=0 centered, y=0 at base, y=1 at tip
+  // fUV: x=0 centered, y=0 at base, y=1 at tip (fire goes UP)
   vec2 fUV = vec2(
     (uv.x - 0.5) * aspect / fireWidth,
-    -(uv.y - fireBaseY) / fireHeight
+    (uv.y - fireBaseY) / fireHeight
   );
 
   // Early exit — skip pixels far from fire
