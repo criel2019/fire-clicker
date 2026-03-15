@@ -13,7 +13,7 @@ import { SoundManager } from './sound-manager.js';
 import { UI } from './ui.js';
 import {
   initFireworks, launchFireworks, screenShake, flash,
-  floatingNumber, showCombo, showAchievement, throwItem,
+  floatingNumber, showAchievement, throwItem,
   tapRipple, updateFireGlow,
 } from './effects.js';
 import { Intro } from './intro.js';
@@ -27,6 +27,7 @@ let npcSystem;
 let toothpickLayer;
 let lastTime = 0;
 let isRunning = false;
+let toothpickItemIndex = 3; // index of 이쑤시개 in wood category
 
 // Fire center position (screen coordinates)
 let fireCenterX = window.innerWidth / 2;
@@ -59,6 +60,11 @@ async function init() {
 
   // Initialize UI
   ui = new UI(gameState, handleBurnItem);
+
+  // Find toothpick item index for quick-throw on tap
+  const woodItems = gameState.getAvailableItems('wood');
+  const tpItem = woodItems.find(it => it.name === '이쑤시개');
+  if (tpItem) toothpickItemIndex = tpItem.index;
 
   // Game state callbacks
   gameState.onLevelUp = handleLevelUp;
@@ -165,16 +171,15 @@ function gameLoop(timestamp) {
 function setupInteractions(fireCanvas, particleCanvas) {
   const app = document.getElementById('app');
 
-  // Tap on fire area to add fuel
+  // Tap on fire area → throw toothpick (not invisible fuel)
   let lastTapTime = 0;
 
   app.addEventListener('pointerdown', (e) => {
     // Don't interact when drawer/burn log is open or clicking UI
-    if (ui.isDrawerOpen || ui.isAmbientMode || ui.burnLogOpen) {
-      // In ambient mode, tap to exit
-      if (ui.isAmbientMode) {
-        ui.toggleAmbientMode();
-      }
+    if (ui.isDrawerOpen || ui.burnLogOpen) return;
+
+    if (ui.isAmbientMode) {
+      ui.toggleAmbientMode();
       return;
     }
 
@@ -189,7 +194,7 @@ function setupInteractions(fireCanvas, particleCanvas) {
     }
 
     const now = performance.now();
-    if (now - lastTapTime < 50) return; // debounce
+    if (now - lastTapTime < 80) return; // debounce
     lastTapTime = now;
 
     // Ember state — tapping revives the dying fire
@@ -200,53 +205,62 @@ function setupInteractions(fireCanvas, particleCanvas) {
         particles.sparkBurst(fireCenterX * dpr, fireCenterY * dpr, 8);
         soundManager.playClick();
       }
-      return; // skip normal click processing
+      return;
     }
 
     // Completely extinguished — tap to re-strike a match
     if (gameState.isExtinguished()) {
-      const fuelValue = gameState.addClickFuel();
+      gameState.addClickFuel();
       tapRipple(e.clientX, e.clientY);
       floatingNumber('🔥 점화!', e.clientX, e.clientY - 20, 'big');
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       particles.sparkBurst(fireCenterX * dpr, fireCenterY * dpr, 20);
       fireEngine.boost(0.4, 2);
       soundManager.playFireball();
-      // Hide restart hint
       const hint = document.getElementById('restartHint');
       if (hint) hint.classList.remove('show');
       return;
     }
 
-    // Add fuel
-    const fuelValue = gameState.addClickFuel();
-
-    // Visual feedback
-    tapRipple(e.clientX, e.clientY);
-
-    // Floating number
-    const displayValue = Math.ceil(fuelValue);
-    floatingNumber(displayValue, e.clientX, e.clientY - 20);
-
-    // Combo display
-    if (gameState.combo >= 3) {
-      showCombo(gameState.combo);
-    }
-
-    // Spark particles at tap position
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    particles.sparkBurst(
-      e.clientX * dpr,
-      e.clientY * dpr,
-      3 + Math.floor(gameState.combo * 0.5)
-    );
-
-    // Fire boost from clicking — very subtle
-    fireEngine.boost(0.02 + gameState.combo * 0.004, 0.4);
-
-    // Sound
-    soundManager.playClick();
+    // Normal state → throw a toothpick into the fire
+    quickThrowToothpick(e.clientX, e.clientY);
   });
+}
+
+// ============ QUICK THROW TOOTHPICK ============
+// Tap = throw toothpick into fire (visible, not invisible fuel)
+function quickThrowToothpick(tapX, tapY) {
+  // Burn the toothpick through game state
+  const result = gameState.burnItem('wood', toothpickItemIndex);
+  if (!result) {
+    // Fallback if burnItem fails
+    gameState.addClickFuel();
+  }
+
+  // Visual: toothpick appears at fire and burns
+  toothpickLayer.addToothpick();
+  toothpickLayer.burnToothpick();
+
+  // Small spark at fire center
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  particles.sparkBurst(
+    fireCenterX * dpr,
+    fireCenterY * dpr,
+    2 + Math.floor(Math.random() * 3)
+  );
+
+  // Floating number at tap position
+  const fuelValue = result ? result.burnValue : 1;
+  floatingNumber(fuelValue, tapX, tapY - 20);
+
+  // Sound
+  soundManager.playClick();
+
+  // Very subtle fire boost
+  fireEngine.boost(0.015, 0.3);
+
+  // Tap ripple
+  tapRipple(tapX, tapY);
 }
 
 // ============ ITEM BURN HANDLER ============
@@ -292,11 +306,6 @@ function handleBurnItem(categoryId, itemIndex) {
       setTimeout(() => {
         floatingNumber(`XP ${xpGain}`, fireCenterX + 40, fireCenterY - 60, 'normal');
       }, 200);
-    }
-
-    // Combo
-    if (combo >= 2) {
-      showCombo(combo);
     }
 
     // Sound

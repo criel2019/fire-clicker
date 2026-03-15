@@ -65,7 +65,7 @@ canvas {
 #fireCanvas {
   z-index: 2;
   mix-blend-mode: screen;
-  filter: blur(2px) saturate(1.35) brightness(1.08) contrast(1.05);
+  filter: blur(3px) saturate(1.45) brightness(1.12) contrast(1.03);
 }
 #groundCanvas {
   z-index: 1;
