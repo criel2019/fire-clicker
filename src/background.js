@@ -270,7 +270,8 @@ export class Background {
         ctx.fill();
       }
 
-      const shade = 22 + Math.floor(Math.random() * 12);
+      // Deterministic shade per stone (avoid flicker from Math.random each frame)
+      const shade = 22 + ((i * 7 + 3) % 12);
       ctx.beginPath();
       ctx.ellipse(sx, sy, stoneSize, stoneSize * 0.62, angle * 0.25, 0, Math.PI * 2);
       ctx.fillStyle = `rgb(${shade + glowAmount * 70}, ${shade + glowAmount * 22}, ${shade})`;
@@ -311,14 +312,18 @@ export class Background {
     ctx.fillStyle = logGrad;
 
     ctx.beginPath();
-    ctx.roundRect(-length / 2, -thickness / 2, length, thickness, thickness * 0.28);
+    if (ctx.roundRect) {
+      ctx.roundRect(-length / 2, -thickness / 2, length, thickness, thickness * 0.28);
+    } else {
+      ctx.rect(-length / 2, -thickness / 2, length, thickness);
+    }
     ctx.fill();
 
     // Bark texture
     ctx.strokeStyle = `rgba(0, 0, 0, ${0.12 + glowAmount * 0.08})`;
     ctx.lineWidth = 0.5;
     for (let i = 0; i < 7; i++) {
-      const lx = -length / 2 + (length / 7) * i + (Math.random() - 0.5) * 8;
+      const lx = -length / 2 + (length / 7) * i + ((i * 3 + 1) % 8 - 4);
       ctx.beginPath();
       ctx.moveTo(lx,     -thickness / 2 + 2);
       ctx.lineTo(lx + 3,  thickness / 2 - 2);

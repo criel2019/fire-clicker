@@ -6,7 +6,7 @@
 import { CATEGORIES, ITEMS, RARITY_NAMES } from './items-data.js';
 
 const SAVE_KEY = 'fire_clicker_save';
-const AUTO_SAVE_INTERVAL = 30000; // 30 seconds
+const AUTO_SAVE_INTERVAL = 15000; // 15 seconds
 
 // Level XP requirements (exponential curve)
 function xpForLevel(level) {
@@ -31,7 +31,7 @@ export class GameState {
     this.totalBurned = 0;
     this.combo = 0;
     this.comboTimer = 0;
-    this.comboDecay = 3; // seconds until combo resets
+    this.comboDecay = 5; // seconds until combo resets (was 3, too tight)
     this.maxCombo = 0;
     this.itemsBurned = {}; // { itemKey: count }
     this.unlockedCategories = ['paper', 'wood']; // start with basic categories
@@ -55,12 +55,12 @@ export class GameState {
       food: 2, clothing: 4,
       flammable: 6, firework: 8,
       electronics: 10, furniture: 12,
-      work: 5, emotions: 7,
+      work: 5, emotion: 7,
       luxury: 15, sports: 9,
-      vehicles: 18, buildings: 22,
+      vehicle: 18, building: 22,
       fantasy: 14, history: 16,
-      toys: 11, music: 13,
-      animals: 17, gag: 3,
+      toy: 11, music: 13,
+      animal: 17, gag: 3,
     };
 
     // Callbacks
@@ -120,10 +120,26 @@ export class GameState {
    * Add fuel (from clicking fire) — small nudge that keeps embers alive
    */
   addClickFuel() {
+    // Re-strike: if fire is extinguished, tapping lights a new match
+    if (this.temperature <= 0) {
+      this.temperature = 100;
+      this.ash += 1;
+      this.stats.totalClicks++;
+      if (this.temperature > this.stats.highestTemp) {
+        this.stats.highestTemp = this.temperature;
+      }
+      this.combo = 0;
+      this.comboTimer = 0;
+      return 100;
+    }
+
     const fuelValue = 2 + this.level * 0.05;
     this.temperature = Math.min(MAX_TEMP, this.temperature + fuelValue);
     this.ash += 1;
     this.stats.totalClicks++;
+    if (this.temperature > this.stats.highestTemp) {
+      this.stats.highestTemp = this.temperature;
+    }
     this._updateCombo();
     return fuelValue;
   }
@@ -193,7 +209,7 @@ export class GameState {
     // Record in burn log
     this.addBurnLog({
       name: result.name,
-      icon: result.name.substring(0, 2),
+      icon: categoryId,
       burnValue: result.burnValue,
       rarity: result.rarity,
       effectType: result.effectType,
@@ -285,7 +301,7 @@ export class GameState {
     }
 
     // Idle ash generation (slow)
-    this.ash += 0.05 * 0.05 * this.level * dt;
+    this.ash += 0.1 * this.level * dt;
 
     // Play time
     this.totalPlayTime += dt;
@@ -349,8 +365,8 @@ export class GameState {
       ['combo_10', '연쇄 방화', '10 콤보 달성', () => this.maxCombo >= 10],
       ['combo_30', '콤보 마스터', '30 콤보 달성', () => this.maxCombo >= 30],
       ['temp_500', '뜨거운 사나이', '500°C 도달', () => this.stats.highestTemp >= 500],
-      ['temp_1000', '용광로', '1000°C 도달', () => this.stats.highestTemp >= 1000],
-      ['temp_max', '태양의 핵', '2000°C 도달', () => this.stats.highestTemp >= 2000],
+      ['temp_1000', '용광로', '950°C 도달', () => this.stats.highestTemp >= 950],
+      ['temp_max', '태양의 핵', '최고 온도 달성!', () => this.stats.highestTemp >= 990],
       ['ash_10000', '재벌', '재 10,000개 수집', () => this.ash >= 10000],
       ['clicks_1000', '클리커 마스터', '1000번 클릭', () => this.stats.totalClicks >= 1000],
       ['explosions_10', '폭파 전문가', '폭발 10회', () => this.stats.explosionsTriggered >= 10],

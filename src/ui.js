@@ -102,6 +102,7 @@ export class UI {
    */
   _setupAmbientToggle() {
     const btn = document.getElementById('ambientToggle');
+    if (!btn) return;
     btn.addEventListener('click', () => {
       this.toggleAmbientMode();
     });
@@ -143,13 +144,20 @@ export class UI {
     drawer.classList.add('open');
     this.isDrawerOpen = true;
 
-    // Load first unlocked category if none selected
-    if (!this.currentCategory) {
-      const unlocked = this.game.getUnlockedCategories();
-      if (unlocked.length > 0) {
-        this.selectCategory(unlocked[0].id);
-      }
+    // Show toothpick panel by default, hide item grid
+    const tpPanel = document.getElementById('toothpickPanel');
+    const itemGrid = document.getElementById('itemGrid');
+    if (tpPanel) tpPanel.style.display = '';
+    if (itemGrid) {
+      itemGrid.style.display = 'none';
+      itemGrid.innerHTML = '';
     }
+
+    // Deselect category tabs (show toothpick home view)
+    document.querySelectorAll('.cat-tab').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    this.currentCategory = null;
   }
 
   closeDrawer() {
@@ -205,6 +213,12 @@ export class UI {
       tab.classList.toggle('active', tab.dataset.catId === categoryId);
     });
 
+    // Hide toothpick panel, show item grid when a category is selected
+    const tpPanel = document.getElementById('toothpickPanel');
+    const itemGrid = document.getElementById('itemGrid');
+    if (tpPanel) tpPanel.style.display = 'none';
+    if (itemGrid) itemGrid.style.display = '';
+
     // Render items
     this._renderItems(categoryId);
   }
@@ -254,6 +268,14 @@ export class UI {
 
       card.appendChild(info);
 
+      // Burn count badge
+      if (item.burnCount > 0) {
+        const countEl = document.createElement('div');
+        countEl.className = 'item-burn-count';
+        countEl.textContent = `x${item.burnCount}`;
+        card.appendChild(countEl);
+      }
+
       // Click handler
       if (item.unlocked) {
         card.addEventListener('click', () => {
@@ -287,10 +309,11 @@ export class UI {
     const rarityEl = document.getElementById('modalRarity');
     const burnEl = document.getElementById('modalBurn');
 
-    iconEl.textContent = item.name.substring(0, 2);
+    const category = CATEGORIES.find(c => c.id === categoryId);
+    iconEl.textContent = category ? category.icon : '🔥';
     iconEl.style.borderColor = RARITY_COLORS[item.rarity];
     iconEl.style.color = RARITY_COLORS[item.rarity];
-    iconEl.style.fontSize = '20px';
+    iconEl.style.fontSize = '32px';
 
     nameEl.textContent = item.name;
     descEl.textContent = item.description;
@@ -332,7 +355,7 @@ export class UI {
     // Temperature
     const temp = Math.floor(this.game.temperature);
     document.getElementById('tempText').textContent = `${temp}°C`;
-    const tempPct = Math.min(100, ((temp - 100) / 1900) * 100);
+    const tempPct = Math.min(100, (temp / 1000) * 100);
     document.getElementById('tempFill').style.height = `${tempPct}%`;
   }
 
@@ -415,8 +438,12 @@ export class UI {
     if (!panel) return;
     this.burnLogOpen = false;
     panel.classList.remove('open');
-    // Wait for transition to finish before hiding
+    // Fallback: if transitionend doesn't fire, hide after 400ms
+    const hideTimer = setTimeout(() => {
+      if (!this.burnLogOpen) panel.classList.add('hidden');
+    }, 400);
     panel.addEventListener('transitionend', () => {
+      clearTimeout(hideTimer);
       if (!this.burnLogOpen) {
         panel.classList.add('hidden');
       }
@@ -431,17 +458,38 @@ export class UI {
     if (!list) return;
     const entries = this.game.getBurnLog();
     if (entries.length === 0) {
-      list.innerHTML = '<div style="padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:0.85rem;">아직 태운 것이 없습니다</div>';
+      list.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.style.cssText = 'padding:20px;text-align:center;color:rgba(255,255,255,0.3);font-size:0.85rem;';
+      empty.textContent = '아직 태운 것이 없습니다';
+      list.appendChild(empty);
       return;
     }
-    list.innerHTML = entries.map(entry => `
-      <div class="burn-log-entry rarity-${entry.rarity}">
-        <span class="bl-icon">${entry.icon}</span>
-        <span class="bl-name">${entry.name}</span>
-        <span class="bl-value">+${entry.burnValue}</span>
-        <span class="bl-time">${this._relTime(entry.timestamp)}</span>
-      </div>
-    `).join('');
+    list.innerHTML = '';
+    for (const entry of entries) {
+      const row = document.createElement('div');
+      row.className = `burn-log-entry rarity-${Math.floor(entry.rarity)}`;
+
+      const iconSpan = document.createElement('span');
+      iconSpan.className = 'bl-icon';
+      const cat = CATEGORIES.find(c => c.id === entry.icon);
+      iconSpan.textContent = cat ? cat.icon : '🔥';
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'bl-name';
+      nameSpan.textContent = entry.name;
+
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'bl-value';
+      valueSpan.textContent = `+${entry.burnValue}`;
+
+      const timeSpan = document.createElement('span');
+      timeSpan.className = 'bl-time';
+      timeSpan.textContent = this._relTime(entry.timestamp);
+
+      row.append(iconSpan, nameSpan, valueSpan, timeSpan);
+      list.appendChild(row);
+    }
   }
 
   /**

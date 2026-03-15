@@ -19,7 +19,7 @@ import {
 import { Intro } from './intro.js';
 import { NPCSystem } from './npc.js';
 import { ToothpickLayer } from './toothpick-layer.js';
-import { ITEMS } from './items-data.js';
+import { ITEMS, CATEGORIES } from './items-data.js';
 
 // ============ GLOBALS ============
 let fireEngine, particles, background, gameState, soundManager, ui;
@@ -86,6 +86,16 @@ async function init() {
   document.addEventListener('pointerdown', startSound, { once: true });
   document.addEventListener('touchstart', startSound, { once: true });
 
+  // Setup mute button
+  const muteBtn = document.getElementById('muteToggle');
+  if (muteBtn) {
+    muteBtn.addEventListener('click', () => {
+      const muted = soundManager.toggleMute();
+      muteBtn.textContent = muted ? '🔇' : '🔊';
+      muteBtn.classList.toggle('muted', muted);
+    });
+  }
+
   // Run intro sequence, then start game loop on completion
   const intro = new Intro(soundManager);
   intro.start(() => {
@@ -130,6 +140,16 @@ function gameLoop(timestamp) {
   // Update HUD (throttled)
   if (Math.floor(timestamp / 200) !== Math.floor((timestamp - dt * 1000) / 200)) {
     ui.updateHUD();
+
+    // Show/hide restart hint when fire is extinguished
+    const hint = document.getElementById('restartHint');
+    if (hint) {
+      if (gameState.isExtinguished()) {
+        hint.classList.add('show');
+      } else {
+        hint.classList.remove('show');
+      }
+    }
   }
 
   requestAnimationFrame(gameLoop);
@@ -157,6 +177,7 @@ function setupInteractions(fireCanvas, particleCanvas) {
         target.closest('#hud') ||
         target.closest('#itemModal') ||
         target.closest('#ambientToggle') ||
+        target.closest('#muteToggle') ||
         target.closest('#burnLogPanel')) {
       return;
     }
@@ -176,8 +197,18 @@ function setupInteractions(fireCanvas, particleCanvas) {
       return; // skip normal click processing
     }
 
-    // Completely extinguished — ignore taps (match re-strike handled elsewhere)
+    // Completely extinguished — tap to re-strike a match
     if (gameState.isExtinguished()) {
+      const fuelValue = gameState.addClickFuel();
+      tapRipple(e.clientX, e.clientY);
+      floatingNumber('🔥 점화!', e.clientX, e.clientY - 20, 'big');
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      particles.sparkBurst(fireCenterX * dpr, fireCenterY * dpr, 20);
+      fireEngine.boost(0.4, 2);
+      soundManager.playFireball();
+      // Hide restart hint
+      const hint = document.getElementById('restartHint');
+      if (hint) hint.classList.remove('show');
       return;
     }
 
@@ -232,7 +263,8 @@ function handleBurnItem(categoryId, itemIndex) {
   // Throw animation
   const startX = window.innerWidth / 2;
   const startY = window.innerHeight * 0.85;
-  const icon = name.substring(0, 2);
+  const category = CATEGORIES.find(c => c.id === categoryId);
+  const icon = category ? category.icon : '🔥';
 
   throwItem(icon, startX, startY, fireCenterX, fireCenterY, () => {
     // After throw animation completes, trigger effects
@@ -241,6 +273,9 @@ function handleBurnItem(categoryId, itemIndex) {
     // Toothpick: animate the burn
     if (isToothpick) {
       toothpickLayer.burnToothpick();
+    } else {
+      // All items visually burn in the fire
+      toothpickLayer.burnItem(icon, rarity, burnValue);
     }
 
     // Floating numbers
@@ -249,7 +284,7 @@ function handleBurnItem(categoryId, itemIndex) {
 
     if (xpGain > 10) {
       setTimeout(() => {
-        floatingNumber(`XP+${xpGain}`, fireCenterX + 40, fireCenterY - 60, 'normal');
+        floatingNumber(`XP ${xpGain}`, fireCenterX + 40, fireCenterY - 60, 'normal');
       }, 200);
     }
 
@@ -476,10 +511,9 @@ function handleResize() {
 }
 
 // ============ VISIBILITY ============
+// (game-state.js handles save on visibility change)
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) {
-    gameState.save();
-  } else {
+  if (!document.hidden) {
     lastTime = performance.now();
   }
 });

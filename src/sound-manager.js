@@ -9,36 +9,36 @@ import { Howl, Howler } from 'howler';
 // Sound configuration
 const SOUNDS_CONFIG = {
   // Fire ambiance loops
-  fireSmall: { src: ['/sounds/fire_small.ogg', '/sounds/fire_small.wav'], loop: true, volume: 0.3 },
-  fireMedium: { src: ['/sounds/fire_medium.ogg', '/sounds/fire_medium.wav'], loop: true, volume: 0.4 },
-  fireBig: { src: ['/sounds/fire_big.ogg', '/sounds/fire_big.wav'], loop: true, volume: 0.5 },
+  fireSmall: { src: ['/sounds/fire_small.ogg'], loop: true, volume: 0.3 },
+  fireMedium: { src: ['/sounds/fire_medium.ogg'], loop: true, volume: 0.4 },
+  fireBig: { src: ['/sounds/fire_big.ogg'], loop: true, volume: 0.5 },
 
   // Item throw / whoosh sounds
-  whoosh1: { src: ['/sounds/whoosh1.ogg', '/sounds/whoosh1.wav'], volume: 0.4 },
-  whoosh2: { src: ['/sounds/whoosh2.ogg', '/sounds/whoosh2.wav'], volume: 0.4 },
-  whoosh3: { src: ['/sounds/whoosh3.ogg', '/sounds/whoosh3.wav'], volume: 0.4 },
-  whoosh4: { src: ['/sounds/whoosh4.ogg', '/sounds/whoosh4.wav'], volume: 0.4 },
-  whoosh5: { src: ['/sounds/whoosh5.ogg', '/sounds/whoosh5.wav'], volume: 0.4 },
+  whoosh1: { src: ['/sounds/whoosh1.ogg'], volume: 0.4 },
+  whoosh2: { src: ['/sounds/whoosh2.ogg'], volume: 0.4 },
+  whoosh3: { src: ['/sounds/whoosh3.ogg'], volume: 0.4 },
+  whoosh4: { src: ['/sounds/whoosh4.ogg'], volume: 0.4 },
+  whoosh5: { src: ['/sounds/whoosh5.ogg'], volume: 0.4 },
 
   // Explosion
-  explosion1: { src: ['/sounds/explosion1.ogg', '/sounds/explosion1.wav'], volume: 0.5 },
-  explosion2: { src: ['/sounds/explosion2.ogg', '/sounds/explosion2.wav'], volume: 0.5 },
+  explosion1: { src: ['/sounds/explosion1.ogg'], volume: 0.5 },
+  explosion2: { src: ['/sounds/explosion2.ogg'], volume: 0.5 },
 
   // Fireworks
-  fwBoom: { src: ['/sounds/fw_boom.ogg', '/sounds/fw_boom.wav'], volume: 0.45 },
-  fwBurst: { src: ['/sounds/fw_burst.ogg', '/sounds/fw_burst.wav'], volume: 0.4 },
-  fwRocket: { src: ['/sounds/fw_rocket.ogg', '/sounds/fw_rocket.wav'], volume: 0.35 },
-  fwWhistle: { src: ['/sounds/fw_whistle.ogg', '/sounds/fw_whistle.wav'], volume: 0.35 },
-  fwCrackle: { src: ['/sounds/fw_crackle.ogg', '/sounds/fw_crackle.wav'], volume: 0.3 },
+  fwBoom: { src: ['/sounds/fw_boom.ogg'], volume: 0.45 },
+  fwBurst: { src: ['/sounds/fw_burst.ogg'], volume: 0.4 },
+  fwRocket: { src: ['/sounds/fw_rocket.ogg'], volume: 0.35 },
+  fwWhistle: { src: ['/sounds/fw_whistle.ogg'], volume: 0.35 },
+  fwCrackle: { src: ['/sounds/fw_crackle.ogg'], volume: 0.3 },
 
   // Fireball
-  fireball: { src: ['/sounds/fireball.ogg', '/sounds/fireball.wav'], volume: 0.4 },
+  fireball: { src: ['/sounds/fireball.ogg'], volume: 0.4 },
 
   // UI
-  click: { src: ['/sounds/click.ogg', '/sounds/click.wav'], volume: 0.2 },
+  click: { src: ['/sounds/click.ogg'], volume: 0.2 },
 
   // Special
-  fireLoop: { src: ['/sounds/fire_loop.ogg', '/sounds/fire_loop.wav'], loop: true, volume: 0.25 },
+  fireLoop: { src: ['/sounds/fire_loop.ogg'], loop: true, volume: 0.25 },
 };
 
 export class SoundManager {
@@ -148,6 +148,18 @@ export class SoundManager {
    * @param {number} intensity - fire intensity (0.3 ~ 2.5)
    */
   updateAmbiance(intensity) {
+    // When fire is out, silence the ambiance
+    if (intensity < 0.01) {
+      if (this.currentAmbiance && this.sounds[this.currentAmbiance]) {
+        const old = this.sounds[this.currentAmbiance];
+        old.fade(old.volume(), 0, 800);
+        setTimeout(() => old.stop(), 800);
+        this.currentAmbiance = null;
+        this.ambianceLevel = '';
+      }
+      return;
+    }
+
     let targetLevel;
     if (intensity < 0.6) targetLevel = 'small';
     else if (intensity < 1.2) targetLevel = 'medium';
@@ -164,9 +176,15 @@ export class SoundManager {
 
     // Fade out current
     if (this.currentAmbiance && this.sounds[this.currentAmbiance]) {
-      const old = this.sounds[this.currentAmbiance];
+      const oldKey = this.currentAmbiance;
+      const old = this.sounds[oldKey];
       old.fade(old.volume(), 0, 1000);
-      setTimeout(() => old.stop(), 1000);
+      setTimeout(() => {
+        // Only stop if it's still the old ambiance (prevent race condition)
+        if (this.currentAmbiance !== oldKey) {
+          old.stop();
+        }
+      }, 1050);
     }
 
     // Fade in new

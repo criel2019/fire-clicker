@@ -134,9 +134,11 @@ export function flash(color = 'white') {
  */
 export function floatingNumber(value, x, y, size = 'normal') {
   const container = document.getElementById('floatingNumbers');
+  if (!container) return;
   const el = document.createElement('div');
   el.className = `float-num ${size}`;
-  el.textContent = `+${value}`;
+  const text = String(value);
+  el.textContent = text.startsWith('+') || text.startsWith('-') || text.startsWith('🔥') || text.startsWith('X') ? text : `+${text}`;
   el.style.left = `${x}px`;
   el.style.top = `${y}px`;
   container.appendChild(el);
@@ -151,6 +153,7 @@ let comboTimeout = null;
 export function showCombo(combo) {
   const display = document.getElementById('comboDisplay');
   const countEl = document.getElementById('comboCount');
+  if (!display || !countEl) return;
 
   countEl.textContent = `x${combo}`;
   display.classList.remove('hidden');
@@ -177,6 +180,7 @@ export function showAchievement(icon, text) {
   const toast = document.getElementById('achievementToast');
   const iconEl = document.getElementById('achievementIcon');
   const textEl = document.getElementById('achievementText');
+  if (!toast || !iconEl || !textEl) return;
 
   iconEl.textContent = icon;
   textEl.textContent = text;
@@ -202,6 +206,10 @@ export function showAchievement(icon, text) {
  */
 export function throwItem(icon, startX, startY, targetX, targetY, onComplete) {
   const layer = document.getElementById('throwLayer');
+  if (!layer) {
+    if (onComplete) onComplete();
+    return;
+  }
   const el = document.createElement('div');
   el.className = 'throw-item';
   el.textContent = icon;
@@ -253,6 +261,7 @@ async function triggerHaptic(type = 'medium') {
  */
 export function tapRipple(x, y) {
   const ripple = document.getElementById('tapRipple');
+  if (!ripple) return;
   ripple.style.left = `${x}px`;
   ripple.style.top = `${y}px`;
   ripple.classList.remove('active');
@@ -268,6 +277,7 @@ export function tapRipple(x, y) {
  */
 export function updateFireGlow(intensity) {
   const glow = document.getElementById('fireGlow');
+  if (!glow) return;
   // At intensity 0.8 (baseline) alpha=0.18 — always a visible warm glow
   const alpha = Math.min(0.38, intensity * 0.22);
   const spread = 65 + intensity * 12;

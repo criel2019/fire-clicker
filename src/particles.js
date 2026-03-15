@@ -437,12 +437,10 @@ export class ParticleSystem {
     }
 
     // Update all particles
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      this.particles[i].update(dt);
-      if (!this.particles[i].alive) {
-        this.particles.splice(i, 1);
-      }
+    for (const p of this.particles) {
+      p.update(dt);
     }
+    this.particles = this.particles.filter(p => p.alive);
   }
 
   render() {
@@ -450,13 +448,12 @@ export class ParticleSystem {
     const ctx = this.ctx;
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-    // Sort by type for better visual layering
-    // smoke first (behind), then ash, embers, sparks (front)
-    const order = { smoke: 0, ash: 1, ember: 2, burst: 3, spark: 4, colorBurst: 5 };
-    this.particles.sort((a, b) => (order[a.type] || 0) - (order[b.type] || 0));
-
-    for (const p of this.particles) {
-      p.draw(ctx);
+    // Draw by type layer for correct visual ordering (avoid sorting every frame)
+    const order = ['smoke', 'ash', 'ember', 'burst', 'spark', 'colorBurst'];
+    for (const type of order) {
+      for (const p of this.particles) {
+        if (p.type === type) p.draw(ctx);
+      }
     }
   }
 }
