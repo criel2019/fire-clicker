@@ -40,17 +40,17 @@ export class UI {
     const woodItems = this.game.getAvailableItems('wood');
     const toothpick = woodItems.find(it => it.name === '이쑤시개');
 
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       btn.classList.remove('throw-flash');
       void btn.offsetWidth;
       btn.classList.add('throw-flash');
 
-      // Close drawer first so the throw arc is fully visible
       this.closeDrawer();
 
       const targetItem = toothpick || woodItems.find(it => it.rarity === 1);
       if (targetItem) {
-        setTimeout(() => this.onBurnItem('wood', targetItem.index), 320);
+        setTimeout(() => this.onBurnItem('wood', targetItem.index), 200);
       }
     });
   }
@@ -144,20 +144,14 @@ export class UI {
     drawer.classList.add('open');
     this.isDrawerOpen = true;
 
-    // Show toothpick panel by default, hide item grid
-    const tpPanel = document.getElementById('toothpickPanel');
-    const itemGrid = document.getElementById('itemGrid');
-    if (tpPanel) tpPanel.style.display = '';
-    if (itemGrid) {
-      itemGrid.style.display = 'none';
-      itemGrid.innerHTML = '';
+    // Auto-select first unlocked category if none selected
+    if (!this.currentCategory) {
+      const allCats = this.game.getAllCategories();
+      const first = allCats.find(c => c.unlocked);
+      if (first) {
+        this.selectCategory(first.id);
+      }
     }
-
-    // Deselect category tabs (show toothpick home view)
-    document.querySelectorAll('.cat-tab').forEach(tab => {
-      tab.classList.remove('active');
-    });
-    this.currentCategory = null;
   }
 
   closeDrawer() {
@@ -213,10 +207,8 @@ export class UI {
       tab.classList.toggle('active', tab.dataset.catId === categoryId);
     });
 
-    // Hide toothpick panel, show item grid when a category is selected
-    const tpPanel = document.getElementById('toothpickPanel');
+    // Show item grid
     const itemGrid = document.getElementById('itemGrid');
-    if (tpPanel) tpPanel.style.display = 'none';
     if (itemGrid) itemGrid.style.display = '';
 
     // Render items

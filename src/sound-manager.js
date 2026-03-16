@@ -6,39 +6,43 @@
 
 import { Howl, Howler } from 'howler';
 
+// Resolve base URL for sound paths (vite base may be '/fire-clicker/')
+const BASE = import.meta.env.BASE_URL || '/';
+const S = (name) => [`${BASE}sounds/${name}`];
+
 // Sound configuration
 const SOUNDS_CONFIG = {
   // Fire ambiance loops
-  fireSmall: { src: ['/sounds/fire_small.ogg'], loop: true, volume: 0.3 },
-  fireMedium: { src: ['/sounds/fire_medium.ogg'], loop: true, volume: 0.4 },
-  fireBig: { src: ['/sounds/fire_big.ogg'], loop: true, volume: 0.5 },
+  fireSmall: { src: S('fire_small.ogg'), loop: true, volume: 0.3 },
+  fireMedium: { src: S('fire_medium.ogg'), loop: true, volume: 0.4 },
+  fireBig: { src: S('fire_big.ogg'), loop: true, volume: 0.5 },
 
   // Item throw / whoosh sounds
-  whoosh1: { src: ['/sounds/whoosh1.ogg'], volume: 0.4 },
-  whoosh2: { src: ['/sounds/whoosh2.ogg'], volume: 0.4 },
-  whoosh3: { src: ['/sounds/whoosh3.ogg'], volume: 0.4 },
-  whoosh4: { src: ['/sounds/whoosh4.ogg'], volume: 0.4 },
-  whoosh5: { src: ['/sounds/whoosh5.ogg'], volume: 0.4 },
+  whoosh1: { src: S('whoosh1.ogg'), volume: 0.4 },
+  whoosh2: { src: S('whoosh2.ogg'), volume: 0.4 },
+  whoosh3: { src: S('whoosh3.ogg'), volume: 0.4 },
+  whoosh4: { src: S('whoosh4.ogg'), volume: 0.4 },
+  whoosh5: { src: S('whoosh5.ogg'), volume: 0.4 },
 
   // Explosion
-  explosion1: { src: ['/sounds/explosion1.ogg'], volume: 0.5 },
-  explosion2: { src: ['/sounds/explosion2.ogg'], volume: 0.5 },
+  explosion1: { src: S('explosion1.ogg'), volume: 0.5 },
+  explosion2: { src: S('explosion2.ogg'), volume: 0.5 },
 
   // Fireworks
-  fwBoom: { src: ['/sounds/fw_boom.ogg'], volume: 0.45 },
-  fwBurst: { src: ['/sounds/fw_burst.ogg'], volume: 0.4 },
-  fwRocket: { src: ['/sounds/fw_rocket.ogg'], volume: 0.35 },
-  fwWhistle: { src: ['/sounds/fw_whistle.ogg'], volume: 0.35 },
-  fwCrackle: { src: ['/sounds/fw_crackle.ogg'], volume: 0.3 },
+  fwBoom: { src: S('fw_boom.ogg'), volume: 0.45 },
+  fwBurst: { src: S('fw_burst.ogg'), volume: 0.4 },
+  fwRocket: { src: S('fw_rocket.ogg'), volume: 0.35 },
+  fwWhistle: { src: S('fw_whistle.ogg'), volume: 0.35 },
+  fwCrackle: { src: S('fw_crackle.ogg'), volume: 0.3 },
 
   // Fireball
-  fireball: { src: ['/sounds/fireball.ogg'], volume: 0.4 },
+  fireball: { src: S('fireball.ogg'), volume: 0.4 },
 
   // UI
-  click: { src: ['/sounds/click.ogg'], volume: 0.2 },
+  click: { src: S('click.ogg'), volume: 0.2 },
 
   // Special
-  fireLoop: { src: ['/sounds/fire_loop.ogg'], loop: true, volume: 0.25 },
+  fireLoop: { src: S('fire_loop.ogg'), loop: true, volume: 0.25 },
 };
 
 export class SoundManager {

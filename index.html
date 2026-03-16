@@ -80,24 +80,35 @@
     <!-- Item throw animation layer -->
     <div id="throwLayer"></div>
 
+    <!-- Cooking area (floating near fire) -->
+    <div id="cookingArea">
+      <div id="cookingSlots"></div>
+      <button id="cookingMenuBtn" title="굽기">🍢</button>
+    </div>
+
+    <!-- Cooking menu popup -->
+    <div id="cookingMenu" class="hidden">
+      <div id="cookingMenuHeader">
+        <span>🍢 불 위에 굽기</span>
+        <button id="cookingMenuClose">&times;</button>
+      </div>
+      <div id="cookingMenuList"></div>
+    </div>
+
     <!-- Inventory drawer -->
     <div id="inventoryDrawer">
       <div id="drawerHandle">
         <div id="handleBar"></div>
-        <span id="drawerTitle">연료 넣기</span>
+        <span id="drawerTitle">연료</span>
       </div>
 
-      <!-- Toothpick quick-throw panel -->
-      <div id="toothpickPanel">
-        <button id="toothpickThrowBtn">
-          <span class="tp-icon">🪥</span>
-          <div class="tp-info">
-            <div class="tp-name">이쑤시개</div>
-            <div class="tp-desc">순식간에 타올랐다 사라지는 작은 불씨</div>
-          </div>
-          <span class="tp-badge">∞</span>
+      <!-- Quick action bar (compact toothpick) -->
+      <div id="quickActions">
+        <button id="toothpickThrowBtn" class="quick-btn">
+          <span class="qb-icon">🪥</span>
+          <span class="qb-label">이쑤시개</span>
+          <span class="qb-badge">∞</span>
         </button>
-        <div id="toothpickHint">탭해서 불에 던지기</div>
       </div>
 
       <div id="categoryTabs">

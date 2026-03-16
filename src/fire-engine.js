@@ -100,12 +100,12 @@ void main(){
 
   float intCl=clamp(u_intensity,0.,1.5);
 
-  // Map intensity to fire geometry
-  float uScale  = 0.50 + intCl * 0.45;
-  float uHeight = 0.65 + intCl * 0.30 + u_breath * 0.018;
+  // Map intensity to fire geometry — capped to prevent overflow past logs
+  float uScale  = 0.50 + intCl * 0.30;
+  float uHeight = 0.65 + intCl * 0.20 + u_breath * 0.018;
 
-  // Fire base at ~28% from bottom — matches fire-clicker log position
-  float fireBase = res.y * 0.28;
+  // Fire base lowered so flames overlap with coal bed / logs
+  float fireBase = res.y * 0.24;
   float clip     = res.y * 0.55 * uScale * uHeight;
   float fireHW   = res.x * 0.33 * uScale;
 
@@ -193,6 +193,11 @@ void main(){
   // Fade alpha with intensity (fire disappears when dying)
   float alpha = clamp(dot(max(fire,sparks),vec3(.3,.59,.11))*2.5,0.,1.);
   alpha *= smoothstep(0.02,0.12,intCl);
+
+  // Soft bottom fade — fire emerges from coal bed gradually, no knife-cut edge
+  float bottomFade = smoothstep(-0.06, 0.10, ypartClip);
+  alpha *= bottomFade;
+  col *= bottomFade;
 
   // Pre-multiplied alpha (blendFunc ONE / ONE_MINUS_SRC_ALPHA)
   gl_FragColor = vec4(col*alpha, alpha);

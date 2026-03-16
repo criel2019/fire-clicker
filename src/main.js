@@ -19,12 +19,14 @@ import {
 import { Intro } from './intro.js';
 import { NPCSystem } from './npc.js';
 import { ToothpickLayer } from './toothpick-layer.js';
+import { CookingSystem } from './cooking.js';
 import { ITEMS, CATEGORIES } from './items-data.js';
 
 // ============ GLOBALS ============
 let fireEngine, particles, background, gameState, soundManager, ui;
 let npcSystem;
 let toothpickLayer;
+let cookingSystem;
 let lastTime = 0;
 let isRunning = false;
 let toothpickItemIndex = 3; // index of 이쑤시개 in wood category
@@ -60,6 +62,9 @@ async function init() {
 
   // Initialize UI
   ui = new UI(gameState, handleBurnItem);
+
+  // Initialize cooking system
+  cookingSystem = new CookingSystem(gameState, soundManager);
 
   // Find toothpick item index for quick-throw on tap
   const woodItems = gameState.getAvailableItems('wood');
@@ -121,6 +126,9 @@ function gameLoop(timestamp) {
 
   // Update game state
   gameState.update(dt);
+
+  // Update cooking
+  cookingSystem.update(dt);
 
   // Update fire intensity from game state
   const intensity = gameState.getFireIntensity();
@@ -189,7 +197,9 @@ function setupInteractions(fireCanvas, particleCanvas) {
         target.closest('#itemModal') ||
         target.closest('#ambientToggle') ||
         target.closest('#muteToggle') ||
-        target.closest('#burnLogPanel')) {
+        target.closest('#burnLogPanel') ||
+        target.closest('#cookingArea') ||
+        target.closest('#cookingMenu')) {
       return;
     }
 

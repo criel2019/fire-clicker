@@ -382,9 +382,9 @@ canvas {
   background: var(--drawer-bg);
   border-top: 1px solid var(--drawer-border);
   border-radius: 20px 20px 0 0;
-  transform: translateY(calc(100% - 48px));
+  transform: translateY(calc(100% - 44px));
   transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  max-height: 65vh;
+  max-height: 55vh;
   display: flex;
   flex-direction: column;
   backdrop-filter: blur(20px);
@@ -403,17 +403,17 @@ canvas {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 10px 16px 6px;
+  padding: 8px 16px 4px;
   cursor: pointer;
   touch-action: none;
   transition: opacity 0.2s;
 }
 #drawerHandle:active { opacity: 0.6; }
 #handleBar {
-  width: 40px; height: 4px;
+  width: 36px; height: 3px;
   background: rgba(255,255,255,0.18);
   border-radius: 2px;
-  margin-bottom: 7px;
+  margin-bottom: 4px;
   transition: background 0.2s;
 }
 #inventoryDrawer.open #handleBar {
@@ -460,90 +460,214 @@ canvas {
   box-shadow: 0 0 12px rgba(255,107,26,0.2);
 }
 
-/* === Toothpick Quick-Throw Panel === */
-#toothpickPanel {
+/* === Quick Actions Bar (compact toothpick + actions) === */
+#quickActions {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 20px 20px;
-  flex: 1;
+  gap: 8px;
+  padding: 4px 12px 8px;
+  flex-shrink: 0;
 }
 
-#toothpickThrowBtn {
-  width: 100%;
-  max-width: 320px;
-  padding: 18px 24px;
-  background: linear-gradient(145deg, rgba(80,45,15,0.9), rgba(55,30,8,0.95));
-  border: 1.5px solid rgba(255,140,40,0.35);
-  border-radius: 18px;
-  cursor: pointer;
+.quick-btn {
   display: flex;
   align-items: center;
-  gap: 16px;
-  transition: all 0.18s cubic-bezier(0.2,0,0.2,1);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,200,100,0.08);
+  gap: 6px;
+  padding: 7px 14px;
+  background: rgba(80,45,15,0.6);
+  border: 1px solid rgba(255,140,40,0.25);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
   font-family: inherit;
   color: var(--text-warm);
-  position: relative;
-  overflow: hidden;
 }
-#toothpickThrowBtn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,150,50,0.12) 0%, transparent 60%);
-  opacity: 0;
-  transition: opacity 0.2s;
+.quick-btn:active {
+  transform: scale(0.95);
+  background: rgba(255,107,26,0.2);
 }
-#toothpickThrowBtn:hover::before { opacity: 1; }
-#toothpickThrowBtn:active {
-  transform: scale(0.96);
-  box-shadow: 0 2px 10px rgba(0,0,0,0.6);
-}
-#toothpickThrowBtn.throw-flash {
+.quick-btn.throw-flash {
   animation: throwFlash 0.25s ease-out;
 }
 @keyframes throwFlash {
-  0% { border-color: rgba(255,200,80,0.9); box-shadow: 0 0 24px rgba(255,160,40,0.6); }
-  100% { border-color: rgba(255,140,40,0.35); }
+  0% { border-color: rgba(255,200,80,0.9); box-shadow: 0 0 16px rgba(255,160,40,0.5); }
+  100% { border-color: rgba(255,140,40,0.25); }
 }
-.tp-icon {
-  font-size: 36px;
-  filter: drop-shadow(0 2px 6px rgba(255,140,40,0.5));
-  flex-shrink: 0;
-}
-.tp-info { text-align: left; }
-.tp-name {
-  font-size: 17px;
-  font-weight: 700;
-  color: var(--fire-white);
-  letter-spacing: 0.3px;
-}
-.tp-desc {
-  font-size: 12px;
-  color: var(--text-dim);
-  margin-top: 3px;
-  line-height: 1.4;
-}
-.tp-badge {
-  margin-left: auto;
-  background: rgba(255,107,26,0.18);
-  border: 1px solid rgba(255,107,26,0.3);
-  border-radius: 10px;
-  padding: 4px 10px;
-  font-size: 12px;
+.qb-icon { font-size: 18px; flex-shrink: 0; }
+.qb-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.qb-badge {
+  font-size: 10px;
   font-weight: 700;
   color: var(--fire-orange);
-  flex-shrink: 0;
+  opacity: 0.6;
 }
 
-#toothpickHint {
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: center;
+/* === Cooking Area (floating near fire) === */
+#cookingArea {
+  position: absolute;
+  left: 12px;
+  bottom: calc(58px + var(--safe-bottom));
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: auto;
+}
+.ambient-mode #cookingArea { opacity: 0; pointer-events: none; }
+
+#cookingMenuBtn {
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.4);
+  border: 1px solid rgba(255,140,40,0.25);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+#cookingMenuBtn:active { transform: scale(0.9); }
+
+#cookingSlots {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cooking-slot {
+  position: relative;
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: rgba(0,0,0,0.35);
+  border: 1px solid rgba(255,140,40,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  transition: all 0.2s;
+  overflow: hidden;
+}
+.cooking-slot:active { transform: scale(0.93); }
+.cooking-slot .cooking-fill {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 0%;
+  border-radius: 0 0 13px 13px;
+  transition: height 0.3s, background 0.3s;
+}
+.cooking-slot[data-state="cooking"] .cooking-fill {
+  background: linear-gradient(0deg, rgba(255,160,40,0.35), rgba(255,100,20,0.15));
+}
+.cooking-slot[data-state="done"] {
+  border-color: rgba(100,255,80,0.5);
+  animation: cookDonePulse 1s ease-in-out infinite;
+}
+.cooking-slot[data-state="done"] .cooking-fill {
+  background: linear-gradient(0deg, rgba(100,255,80,0.3), rgba(80,200,60,0.1));
+  height: 100% !important;
+}
+.cooking-slot[data-state="burnt"] {
+  border-color: rgba(100,100,100,0.4);
   opacity: 0.6;
-  letter-spacing: 0.5px;
+}
+.cooking-slot .cooking-icon {
+  position: relative;
+  z-index: 1;
+  filter: drop-shadow(0 1px 3px rgba(0,0,0,0.5));
+}
+.cooking-slot .cooking-label {
+  position: absolute;
+  bottom: 2px;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255,200,100,0.8);
+  z-index: 1;
+}
+@keyframes cookDonePulse {
+  0%, 100% { box-shadow: 0 0 8px rgba(100,255,80,0.2); }
+  50% { box-shadow: 0 0 16px rgba(100,255,80,0.4); }
+}
+
+/* === Cooking Menu Popup === */
+#cookingMenu {
+  position: absolute;
+  left: 12px;
+  bottom: calc(110px + var(--safe-bottom));
+  z-index: 30;
+  background: rgba(15,12,8,0.95);
+  border: 1px solid rgba(255,140,40,0.25);
+  border-radius: 16px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.7);
+  width: 220px;
+  max-height: 300px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+#cookingMenu.hidden { display: none; }
+
+#cookingMenuHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,140,40,0.15);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-warm);
+}
+#cookingMenuClose {
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+#cookingMenuList {
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.cooking-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cooking-menu-item:active { background: rgba(255,107,26,0.15); }
+.cooking-menu-item .cm-icon { font-size: 22px; flex-shrink: 0; }
+.cooking-menu-item .cm-info { flex: 1; min-width: 0; }
+.cooking-menu-item .cm-name { font-size: 13px; font-weight: 600; color: var(--text-warm); }
+.cooking-menu-item .cm-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-top: 1px;
+}
+.cooking-menu-item .cm-reward {
+  font-size: 10px;
+  color: var(--fire-orange);
+  font-weight: 600;
+}
+.cooking-menu-item.locked {
+  opacity: 0.35;
+  pointer-events: none;
+}
+.cooking-menu-item.locked .cm-name::after {
+  content: ' 🔒';
+  font-size: 10px;
 }
 
 /* === Item Grid (for category items when drawer is opened in item mode) === */
@@ -917,22 +1041,24 @@ canvas {
 
 /* === Responsive === */
 @media (max-width: 380px) {
-  #itemGrid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .item-card { padding: 10px 10px; }
-  .item-card .item-icon { width: 38px; height: 38px; font-size: 22px; }
-  .item-card .item-name { font-size: 12px; }
+  #itemGrid { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .item-card { padding: 8px 8px; gap: 8px; }
+  .item-card .item-icon { width: 32px; height: 32px; font-size: 18px; border-radius: 8px; }
+  .item-card .item-name { font-size: 11px; }
+  .item-card .item-desc { font-size: 9px; }
   #fireLevelText { font-size: 12px; }
   .currency { font-size: 11px; padding: 4px 8px; }
-  #toothpickThrowBtn { padding: 14px 16px; }
-  .tp-icon { font-size: 28px; }
-  .tp-name { font-size: 15px; }
+  .quick-btn { padding: 6px 10px; }
+  .qb-icon { font-size: 16px; }
+  .qb-label { font-size: 11px; }
+  .cat-tab { padding: 4px 10px; font-size: 11px; }
+  #cookingMenu { width: 190px; }
 }
 
 @media (min-width: 768px) {
   #itemGrid { grid-template-columns: repeat(3, 1fr); }
-  #inventoryDrawer { max-width: 600px; left: 50%; transform: translateX(-50%) translateY(calc(100% - 48px)); }
+  #inventoryDrawer { max-width: 600px; left: 50%; transform: translateX(-50%) translateY(calc(100% - 44px)); }
   #inventoryDrawer.open { transform: translateX(-50%) translateY(0); }
-  #toothpickThrowBtn { max-width: 480px; }
 }
 
 /* === Landscape mode === */
@@ -1157,7 +1283,7 @@ canvas {
 /* === Mute Button === */
 #muteToggle {
   position: absolute;
-  bottom: calc(56px + var(--safe-bottom));
+  bottom: calc(52px + var(--safe-bottom));
   right: 12px;
   z-index: 26; /* above drawer (z-index: 25) */
   background: rgba(0,0,0,0.3);
