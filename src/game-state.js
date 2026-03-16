@@ -40,6 +40,7 @@ export class GameState {
     this.lastSaveTime = Date.now();
     this.lastActiveTime = Date.now();
     this.burnLog = []; // Array of { name, icon, timestamp, burnValue, rarity, effectType }
+    this.cookingSlots = []; // Serialized cooking slot data for save/load
     this.stats = {
       totalClicks: 0,
       highestTemp: 200,
@@ -430,6 +431,7 @@ export class GameState {
       lastSaveTime: Date.now(),
       lastActiveTime: Date.now(),
       burnLog: this.burnLog,
+      cookingSlots: this.cookingSlots,
     };
     try {
       localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -466,6 +468,7 @@ export class GameState {
       this.lastSaveTime = data.lastSaveTime || Date.now();
       this.lastActiveTime = data.lastActiveTime || Date.now();
       this.burnLog = data.burnLog || [];
+      this.cookingSlots = data.cookingSlots || [];
 
       return true;
     } catch (e) {

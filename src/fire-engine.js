@@ -100,14 +100,14 @@ void main(){
 
   float intCl=clamp(u_intensity,0.,1.5);
 
-  // Map intensity to fire geometry — capped to prevent overflow past logs
-  float uScale  = 0.50 + intCl * 0.30;
-  float uHeight = 0.65 + intCl * 0.20 + u_breath * 0.018;
+  // Map intensity to fire geometry — original width restored, bigger campfire area
+  float uScale  = 0.50 + intCl * 0.45;
+  float uHeight = 0.70 + intCl * 0.22 + u_breath * 0.018;
 
-  // Fire base lowered so flames overlap with coal bed / logs
-  float fireBase = res.y * 0.24;
-  float clip     = res.y * 0.55 * uScale * uHeight;
-  float fireHW   = res.x * 0.33 * uScale;
+  // Fire base low — flames overlap with coal bed / logs, generous vertical room
+  float fireBase = res.y * 0.20;
+  float clip     = res.y * 0.58 * uScale * uHeight;
+  float fireHW   = res.x * 0.36 * uScale;
 
   float xpart     = (fc.x-(res.x*.5-fireHW))/(2.*fireHW);
   float ypartClip = (fc.y-fireBase)/clip;

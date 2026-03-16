@@ -570,7 +570,6 @@ canvas {
 }
 .cooking-slot[data-state="done"] .cooking-fill {
   background: linear-gradient(0deg, rgba(100,255,80,0.3), rgba(80,200,60,0.1));
-  height: 100% !important;
 }
 .cooking-slot[data-state="burnt"] {
   border-color: rgba(100,100,100,0.4);
@@ -592,6 +591,22 @@ canvas {
 @keyframes cookDonePulse {
   0%, 100% { box-shadow: 0 0 8px rgba(100,255,80,0.2); }
   50% { box-shadow: 0 0 16px rgba(100,255,80,0.4); }
+}
+
+/* Fire-out state: cooking paused, dim slots with indicator */
+#cookingSlots.fire-out .cooking-slot {
+  opacity: 0.4;
+  border-color: rgba(100,100,120,0.3);
+  animation: none;
+}
+#cookingSlots.fire-out .cooking-slot::after {
+  content: '❄';
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font-size: 10px;
+  z-index: 2;
+  opacity: 0.7;
 }
 
 /* === Cooking Menu Popup === */

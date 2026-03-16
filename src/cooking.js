@@ -4,7 +4,16 @@
  * Healing / chill feature for 불키우기
  */
 
-import { floatingNumber, showAchievement } from './effects.js';
+import { floatingNumber } from './effects.js';
+
+// ── Constants ──
+const MAX_SLOTS = 2;
+const COOK_SPEED_BASE = 0.5;
+const COOK_SPEED_SCALE = 0.8;
+const BURN_SPEED_MULT = 0.5;
+const PERFECT_THRESHOLD = 0.4;
+const MIN_FIRE_TEMP = 30;
+const MIN_COOK_INTENSITY = 0.05;
 
 // ── Cooking item definitions ──
 export const COOKING_ITEMS = [
@@ -82,8 +91,6 @@ export const COOKING_ITEMS = [
   },
 ];
 
-const MAX_SLOTS = 2;
-
 export class CookingSystem {
   constructor(gameState, soundManager) {
     this.game = gameState;
@@ -91,11 +98,45 @@ export class CookingSystem {
     this.slots = []; // { item, state, timer, cookTime, burnTime }
     this.menuOpen = false;
 
+    this._restoreSlots();
     this._initUI();
+    this._setupOutsideClick();
   }
 
+  // ── Save / Load ──
+
+  _restoreSlots() {
+    const saved = this.game.cookingSlots;
+    if (!saved || !saved.length) return;
+
+    for (const s of saved) {
+      const item = COOKING_ITEMS.find(i => i.id === s.itemId);
+      if (item) {
+        this.slots.push({
+          item,
+          state: s.state || 'cooking',
+          timer: s.timer || 0,
+          cookTime: item.cookTime,
+          burnTime: item.burnTime,
+        });
+      }
+    }
+
+    // Defer render until DOM is ready
+    requestAnimationFrame(() => this._renderSlots());
+  }
+
+  _syncSave() {
+    this.game.cookingSlots = this.slots.map(s => ({
+      itemId: s.item.id,
+      state: s.state,
+      timer: s.timer,
+    }));
+  }
+
+  // ── UI Init ──
+
   _initUI() {
-    // Menu button
     const menuBtn = document.getElementById('cookingMenuBtn');
     if (menuBtn) {
       menuBtn.addEventListener('click', (e) => {
@@ -104,15 +145,24 @@ export class CookingSystem {
       });
     }
 
-    // Menu close
     const closeBtn = document.getElementById('cookingMenuClose');
     if (closeBtn) {
       closeBtn.addEventListener('click', () => this.closeMenu());
     }
 
-    // Render menu items
     this._renderMenu();
   }
+
+  _setupOutsideClick() {
+    document.addEventListener('pointerdown', (e) => {
+      if (!this.menuOpen) return;
+      if (!e.target.closest('#cookingMenu') && !e.target.closest('#cookingMenuBtn')) {
+        this.closeMenu();
+      }
+    });
+  }
+
+  // ── Menu ──
 
   toggleMenu() {
     if (this.menuOpen) {
@@ -168,32 +218,44 @@ export class CookingSystem {
     }
   }
 
+  // ── Helpers ──
+
+  _getCookingAreaX() {
+    const area = document.getElementById('cookingArea');
+    if (area) {
+      const rect = area.getBoundingClientRect();
+      return rect.left + rect.width / 2;
+    }
+    return 60;
+  }
+
+  // ── Cooking Logic ──
+
   startCooking(itemDef) {
     if (this.slots.length >= MAX_SLOTS) {
-      // All slots full
       floatingNumber('가득 참!', window.innerWidth / 2, window.innerHeight * 0.4, 'normal');
       return;
     }
 
-    // Fire must be alive
-    if (this.game.temperature < 30) {
+    if (this.game.temperature < MIN_FIRE_TEMP) {
       floatingNumber('불이 약해요', window.innerWidth / 2, window.innerHeight * 0.4, 'normal');
       return;
     }
 
     const slot = {
       item: itemDef,
-      state: 'cooking', // 'cooking' | 'done' | 'burnt'
+      state: 'cooking',
       timer: 0,
       cookTime: itemDef.cookTime,
       burnTime: itemDef.burnTime,
     };
 
     this.slots.push(slot);
+    this._syncSave();
     this._renderSlots();
 
     if (this.sound) {
-      this.sound.playClick();
+      this.sound.playWhoosh();
     }
   }
 
@@ -203,13 +265,22 @@ export class CookingSystem {
   update(dt) {
     if (this.slots.length === 0) return;
 
-    // Fire intensity affects cooking speed
     const intensity = this.game.getFireIntensity();
-    if (intensity < 0.05) return; // fire is out, cooking stops
+    const firePaused = intensity < MIN_COOK_INTENSITY;
 
-    const speedMult = 0.5 + intensity * 0.8; // 0.5x at low fire, 1.7x at max
+    // Visual feedback when fire is out (M-1)
+    const container = document.getElementById('cookingSlots');
+    if (container) {
+      container.classList.toggle('fire-out', firePaused);
+    }
+
+    if (firePaused) return;
+
+    const speedMult = COOK_SPEED_BASE + intensity * COOK_SPEED_SCALE;
 
     let changed = false;
+    const x = this._getCookingAreaX();
+
     for (const slot of this.slots) {
       if (slot.state === 'cooking') {
         slot.timer += dt * speedMult;
@@ -218,24 +289,23 @@ export class CookingSystem {
           slot.timer = 0;
           changed = true;
 
-          // Notify
-          floatingNumber(`${slot.item.icon} 완성!`, 60, window.innerHeight * 0.45, 'big');
-          if (this.sound) this.sound.playClick();
+          floatingNumber(`${slot.item.icon} 완성!`, x, window.innerHeight * 0.45, 'big');
+          if (this.sound) this.sound.playFireball();
         }
       } else if (slot.state === 'done') {
-        slot.timer += dt * speedMult * 0.5; // burns slower
+        slot.timer += dt * speedMult * BURN_SPEED_MULT;
         if (slot.timer >= slot.burnTime) {
           slot.state = 'burnt';
           changed = true;
-          floatingNumber(`${slot.item.icon} 탔다...`, 60, window.innerHeight * 0.45, 'normal');
+          floatingNumber(`${slot.item.icon} 탔다...`, x, window.innerHeight * 0.45, 'normal');
         }
       }
     }
 
     if (changed) {
+      this._syncSave();
       this._renderSlots();
     } else {
-      // Update progress bars smoothly
       this._updateSlotProgress();
     }
   }
@@ -247,14 +317,14 @@ export class CookingSystem {
     const slot = this.slots[slotIndex];
     if (!slot) return;
 
+    const x = this._getCookingAreaX();
     let reward;
     let label;
     let size;
 
     if (slot.state === 'done') {
-      // Perfect cook within the first 40% of burn window = perfect
       const burnProgress = slot.timer / slot.burnTime;
-      if (burnProgress < 0.4) {
+      if (burnProgress < PERFECT_THRESHOLD) {
         reward = slot.item.perfectReward;
         label = '완벽!';
         size = 'big';
@@ -267,10 +337,15 @@ export class CookingSystem {
       reward = slot.item.burntReward;
       label = '탔지만...';
       size = 'normal';
-    } else if (slot.state === 'cooking') {
-      // Too early - still raw
-      floatingNumber('아직 덜 익었어요', 60, window.innerHeight * 0.42, 'normal');
+    } else {
+      // cooking state - too early
+      floatingNumber('아직 덜 익었어요', x, window.innerHeight * 0.42, 'normal');
       return;
+    }
+
+    // Safety: reward should never be undefined here, but guard just in case
+    if (!reward) {
+      reward = { ash: 0, xp: 0 };
     }
 
     // Apply rewards
@@ -279,17 +354,24 @@ export class CookingSystem {
     if (reward.ember) this.game.ember += reward.ember;
 
     // Visual feedback
-    floatingNumber(`${slot.item.icon} ${label} +${reward.ash}`, 60, window.innerHeight * 0.40, size);
+    floatingNumber(`${slot.item.icon} ${label} +${reward.ash}`, x, window.innerHeight * 0.40, size);
 
     // Track cooking stats
     const cookKey = `cook_${slot.item.id}`;
     this.game.itemsBurned[cookKey] = (this.game.itemsBurned[cookKey] || 0) + 1;
 
-    // Sound
-    if (this.sound) this.sound.playClick();
+    // Sound - differentiate by result quality (M-4)
+    if (this.sound) {
+      if (size === 'big') {
+        this.sound.playFireball();
+      } else {
+        this.sound.playWhoosh();
+      }
+    }
 
     // Remove slot
     this.slots.splice(slotIndex, 1);
+    this._syncSave();
     this._renderSlots();
   }
 
@@ -329,11 +411,17 @@ export class CookingSystem {
       if (slot.state === 'cooking') {
         const pct = Math.min(100, (slot.timer / slot.cookTime) * 100);
         fill.style.height = `${pct}%`;
+      } else if (slot.state === 'done') {
+        // Show remaining time as decreasing fill (burn countdown)
+        const burnPct = Math.min(100, (slot.timer / slot.burnTime) * 100);
+        fill.style.height = `${100 - burnPct}%`;
       }
 
+      // Use dataset index for click handler to avoid closure bugs (C-3)
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        this.harvest(i);
+        const idx = parseInt(el.dataset.index, 10);
+        this.harvest(idx);
       });
 
       container.appendChild(el);
@@ -355,11 +443,12 @@ export class CookingSystem {
         const pct = Math.min(100, (slot.timer / slot.cookTime) * 100);
         fill.style.height = `${pct}%`;
       } else if (slot.state === 'done') {
-        // Show burn progress (green → red)
+        // Burn countdown: fill shrinks as burn progresses, color shifts to red
         const burnPct = Math.min(100, (slot.timer / slot.burnTime) * 100);
-        fill.style.height = '100%';
+        fill.style.height = `${100 - burnPct}%`;
         if (burnPct > 60) {
-          fill.style.background = `linear-gradient(0deg, rgba(255,${Math.round(160 - burnPct * 1.2)},40,0.35), rgba(255,80,20,0.15))`;
+          const g = Math.round(255 - burnPct * 2);
+          fill.style.background = `linear-gradient(0deg, rgba(255,${g},40,0.35), rgba(255,80,20,0.15))`;
         }
       }
     });
