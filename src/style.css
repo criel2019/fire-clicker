@@ -65,7 +65,7 @@ canvas {
 #fireCanvas {
   z-index: 2;
   mix-blend-mode: screen;
-  filter: blur(3px) saturate(1.45) brightness(1.12) contrast(1.03);
+  filter: blur(0px) saturate(1.45) brightness(1.12) contrast(1.03);
 }
 #groundCanvas {
   z-index: 1;
@@ -499,6 +499,29 @@ canvas {
   font-weight: 700;
   color: var(--fire-orange);
   opacity: 0.6;
+}
+
+/* Toothpick: visually prominent but compact */
+#toothpickThrowBtn {
+  flex: 1;
+  padding: 12px 20px;
+  gap: 10px;
+  justify-content: flex-start;
+  border-color: rgba(255,140,40,0.35);
+}
+#toothpickThrowBtn .qb-icon {
+  font-size: 26px;
+  filter: drop-shadow(0 1px 4px rgba(255,140,40,0.4));
+}
+#toothpickThrowBtn .qb-label {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--fire-white);
+}
+#toothpickThrowBtn .qb-badge {
+  margin-left: auto;
+  font-size: 12px;
+  opacity: 0.8;
 }
 
 /* === Cooking Area (floating near fire) === */

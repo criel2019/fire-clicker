@@ -30,6 +30,8 @@ let cookingSystem;
 let lastTime = 0;
 let isRunning = false;
 let toothpickItemIndex = 3; // index of 이쑤시개 in wood category
+let _fireCanvas = null;
+let _lastBlurPx = -1;
 
 // Fire center position (screen coordinates)
 let fireCenterX = window.innerWidth / 2;
@@ -38,7 +40,8 @@ let fireCenterY = window.innerHeight * 0.55;
 // ============ INITIALIZATION ============
 async function init() {
   // Get canvas elements
-  const fireCanvas = document.getElementById('fireCanvas');
+  _fireCanvas = document.getElementById('fireCanvas');
+  const fireCanvas = _fireCanvas;
   const particleCanvas = document.getElementById('particleCanvas');
   const bgCanvas = document.getElementById('bgCanvas');
   const groundCanvas = document.getElementById('groundCanvas');
@@ -134,6 +137,15 @@ function gameLoop(timestamp) {
   const intensity = gameState.getFireIntensity();
   fireEngine.setBaseIntensity(intensity);
   particles.setIntensity(intensity);
+
+  // Dynamic blur: 0px default → max 0.1px at full intensity
+  if (_fireCanvas) {
+    const newBlurPx = Math.round(intensity * 0.1 * 100) / 100;
+    if (Math.abs(newBlurPx - _lastBlurPx) >= 0.01) {
+      _fireCanvas.style.filter = `blur(${newBlurPx}px) saturate(1.45) brightness(1.12) contrast(1.03)`;
+      _lastBlurPx = newBlurPx;
+    }
+  }
   particles.setWind(fireEngine.wind);
   particles.fireCenter = { x: 0.5, y: 0.72 };
 
